@@ -1,17 +1,18 @@
 ﻿# backend/create_tables.py
-import os # 用于删除旧的数据库文件（可选）
-from pathlib import Path # 用于构建数据库文件路径
+import os  # 用于删除旧的数据库文件（可选）
+from pathlib import Path  # 用于构建数据库文件路径
 
 # 首先确保 SQLModel 和 engine 被正确导入和配置
 # 这里的导入路径取决于您的 database.py 文件相对于 create_tables.py 的位置
 # 假设它们都在 backend 文件夹下
-from database import engine, DATABASE_FILE_PATH # 确保 DATABASE_FILE_PATH 在 database.py 中已定义并导出
+from database import engine, DATABASE_FILE_PATH  # 确保 DATABASE_FILE_PATH 在 database.py 中已定义并导出
 from sqlmodel import SQLModel
 
 # !!! 非常重要：在这里导入所有定义了 table=True 的模型 !!!
 # 这样 SQLModel.metadata 才能知道这些表的存在。
 # 确保这里的导入路径相对于 create_tables.py 是正确的。
-from models import User, VerificationToken, PasswordResetToken # 以及您项目中其他所有表模型
+from models import User, VerificationToken, PasswordResetToken  # 以及您项目中其他所有表模型
+
 
 def init_db():
     print("开始初始化数据库...")
@@ -59,15 +60,15 @@ def init_db():
         print("以及是否有重复的 UniqueConstraint 或不当的 index=True/unique=True 组合。")
         raise
 
+
 if __name__ == "__main__":
     print("--------------------------------------------------------------------")
     print("此脚本将尝试根据您的 SQLModel 模型在数据库中创建表结构。")
     print(f"目标数据库文件: {DATABASE_FILE_PATH}")
     print("--------------------------------------------------------------------")
-    # 您可以在这里添加交互式确认，以防止意外运行
-    # confirm = input("是否继续执行数据库初始化? (yes/no): ")
-    # if confirm.lower() == 'yes':
-    #     init_db()
-    # else:
-    #     print("数据库初始化已取消。")
-    init_db() # 为了直接运行，暂时不加交互式确认
+
+    confirm = input("是否继续执行数据库初始化? (yes/no): ")
+    if confirm.lower() == 'yes':
+        init_db()
+    else:
+        print("数据库初始化已取消。")
