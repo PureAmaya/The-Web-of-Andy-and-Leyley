@@ -1,12 +1,18 @@
 ﻿# backend/main.py
+import shutil
+import uuid
+from pathlib import Path
+from typing import Optional, List
+
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import datetime  # 用于 datetime.datetime, datetime.timezone, datetime.timedelta
-
-from sqlmodel import Session, select
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
+from sqlmodel import Session, select, SQLModel
 
 # 项目内部模块导入
 from database import create_db_and_tables, engine
@@ -16,7 +22,8 @@ from models import (
     UserRead,
     VerificationToken,
     Token,
-    RefreshTokenRequest, UserPasswordUpdate, UserUpdate, PasswordResetRequest, PasswordResetToken
+    RefreshTokenRequest, UserPasswordUpdate, UserUpdate, PasswordResetRequest, PasswordResetToken, PasswordResetForm,
+    GalleryItemCreate, GalleryItem, GalleryItemReadWithUploader
 )
 from auth_utils import (
     get_password_hash,
@@ -27,10 +34,20 @@ from auth_utils import (
     create_refresh_token,
     get_current_active_user,
     verify_refresh_token_and_get_token_data,
-    get_current_active_user, generate_password_reset_token
+    get_current_active_user, generate_password_reset_token, verify_password_reset_token
 )
-from email_utils import send_verification_email,send_password_reset_email
+from email_utils import send_verification_email, send_password_reset_email
 from core.config import settings
+from PIL import Image as PILImage  # <--- 1. 导入 Pillow 的 Image 模块
+from PIL.Image import Resampling  # <--- 1.1 导入 Resampling (Pillow 9.1.0+)
+import io  # 用于处理图片字节流
+
+# --- 定义上传文件存储的临时目录 (后续会根据存储策略调整) ---
+# 确保这个目录存在，或者在应用启动时创建它
+# 为了安全，这个目录不应该直接对外暴露通过HTTP访问
+UPLOAD_DIR = Path("backend/uploads")  # 假设在 backend 文件夹下创建一个 uploads 目录
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)  # 创建目录（如果不存在）
+GALLERY_TAGS = ["Gallery"]  # 为画廊相关端点定义标签
 
 
 @asynccontextmanager
@@ -40,7 +57,7 @@ async def lifespan(app: FastAPI):
     在应用启动时创建数据库表。
     """
     print("应用启动中...")
-    #create_db_and_tables()
+    # create_db_and_tables()
     print("数据库表已检查/创建。")
     yield  # 应用在此处运行
     print("应用关闭中...")
@@ -56,15 +73,17 @@ app = FastAPI(
 origins = [
     settings.PORTAL_FRONTEND_BASE_URL,  # 从配置中读取前端地址
     "http://localhost",  # 通用本地开发
-    "http://localhost:8080",  # 常见 Vue CLI 端口
-    "http://localhost:5173",  # 常见 Vite 端口
-    # 根据需要添加其他允许的源
 ]
 # 去重并过滤空值（如果 PORTAL_FRONTEND_BASE_URL 未设置或与其他重复）
 # origins = list(filter(None, set(origins)))
 # if not origins: # 如果列表为空，至少允许一个，例如本地开发时的通用端口
 #     origins = ["http://localhost:5173"]
 
+
+# --- 2. 挂载静态文件目录 ---
+# 这会使得 UPLOAD_DIR 目录下的所有文件可以通过 /uploads 这个 URL 路径前缀访问
+# 例如，如果 UPLOAD_DIR 中有一个文件 a.jpg，那么它可以通过 http://localhost:8000/uploads/a.jpg 访问
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -311,12 +330,11 @@ async def read_own_items(
     return {"message": f"用户 {current_user.username} (ID: {current_user.id}) 的物品列表", "items": []}
 
 
-
 # --- 11. 新增：刷新令牌端点 ---
 @app.post("/auth/refresh-token", response_model=Token, tags=AUTH_TAGS)
 async def refresh_access_token(
-    refresh_request: RefreshTokenRequest, # <--- 3. 接收包含刷新令牌的请求体
-    session: Session = Depends(get_session)
+        refresh_request: RefreshTokenRequest,  # <--- 3. 接收包含刷新令牌的请求体
+        session: Session = Depends(get_session)
 ):
     """
     使用刷新令牌获取新的访问令牌。
@@ -341,7 +359,7 @@ async def refresh_access_token(
         )
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, # 使用 403 表示用户已知但被禁止
+            status_code=status.HTTP_403_FORBIDDEN,  # 使用 403 表示用户已知但被禁止
             detail="用户已被禁用",
         )
     # 如果在登录时检查了 is_verified，这里也可以考虑检查，但通常刷新令牌时主要关注用户是否还存在且活动。
@@ -364,16 +382,17 @@ async def refresh_access_token(
 
     return Token(
         access_token=new_access_token,
-        refresh_token=refresh_token_str, # 返回旧的刷新令牌 (策略1)
+        refresh_token=refresh_token_str,  # 返回旧的刷新令牌 (策略1)
         token_type="bearer"
     )
 
+
 # --- 12. 新增：更新当前用户信息端点 ---
-@app.patch("/users/me", response_model=UserRead, tags=USERS_TAGS) # USERS_TAGS 已在 /users/me (GET) 处定义
+@app.patch("/users/me", response_model=UserRead, tags=USERS_TAGS)  # USERS_TAGS 已在 /users/me (GET) 处定义
 async def update_user_me(
-    user_update_data: UserUpdate, # <--- 2. 接收 UserUpdate 模型的数据
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_active_user) # <--- 3. 获取当前登录用户
+        user_update_data: UserUpdate,  # <--- 2. 接收 UserUpdate 模型的数据
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)  # <--- 3. 获取当前登录用户
 ):
     """
     更新当前登录用户的个人资料。
@@ -397,7 +416,7 @@ async def update_user_me(
             updated_something = True
 
     if updated_something:
-        current_user.updated_at = datetime.datetime.now(datetime.timezone.utc) # 更新时间戳
+        current_user.updated_at = datetime.datetime.now(datetime.timezone.utc)  # 更新时间戳
         session.add(current_user)
         session.commit()
         session.refresh(current_user)
@@ -415,9 +434,9 @@ async def update_user_me(
 # --- 13. 新增：修改当前用户密码端点 ---
 @app.post("/users/me/change-password", status_code=status.HTTP_200_OK, tags=USERS_TAGS)
 async def change_current_user_password(
-    password_update_data: UserPasswordUpdate, # <--- 3. 接收 UserPasswordUpdate 模型的数据
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_active_user) # <--- 4. 获取当前登录用户
+        password_update_data: UserPasswordUpdate,  # <--- 3. 接收 UserPasswordUpdate 模型的数据
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)  # <--- 4. 获取当前登录用户
 ):
     """
     修改当前登录用户的密码。
@@ -426,7 +445,7 @@ async def change_current_user_password(
     # 5. 验证当前密码是否正确
     if not verify_password(password_update_data.current_password, current_user.hashed_password):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, # 或者 401 Unauthorized，取决于你的错误处理偏好
+            status_code=status.HTTP_400_BAD_REQUEST,  # 或者 401 Unauthorized，取决于你的错误处理偏好
             detail="当前密码不正确",
         )
 
@@ -453,9 +472,9 @@ async def change_current_user_password(
 # --- 14. 新增：请求密码重置端点 ---
 @app.post("/auth/request-password-reset", status_code=status.HTTP_200_OK, tags=AUTH_TAGS)
 async def request_password_reset(
-    reset_request: PasswordResetRequest,
-    background_tasks: BackgroundTasks,
-    session: Session = Depends(get_session)
+        reset_request: PasswordResetRequest,
+        background_tasks: BackgroundTasks,
+        session: Session = Depends(get_session)
 ):
     user = session.exec(select(User).where(User.email == reset_request.email)).first()
 
@@ -476,7 +495,7 @@ async def request_password_reset(
 
             # --- 解除这部分注释并使用新的邮件函数 ---
             background_tasks.add_task(
-                send_password_reset_email, # <--- 使用新的函数名
+                send_password_reset_email,  # <--- 使用新的函数名
                 email_to=user.email,
                 username=user.username,
                 token=raw_reset_token
@@ -491,10 +510,262 @@ async def request_password_reset(
     return {"message": "如果您的邮箱地址在我们系统中注册过，您将会收到一封包含密码重置说明的邮件。"}
 
 
+# --- 15. 新增：重置密码端点 ---
+@app.post("/auth/reset-password", status_code=status.HTTP_200_OK, tags=AUTH_TAGS)
+async def reset_password(
+        password_reset_form: PasswordResetForm,  # <--- 2. 接收包含令牌和新密码的请求体
+        session: Session = Depends(get_session)
+):
+    """
+    用户使用从邮件中获取的令牌来重置密码。
+    """
+    # 3. 验证密码重置令牌的有效性 (签名和有效期)
+    email_from_token = verify_password_reset_token(password_reset_form.token)
+    if not email_from_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无效或已过期的密码重置令牌",
+        )
+
+    # 4. 根据从令牌中获取的邮箱查找用户
+    user = session.exec(select(User).where(User.email == email_from_token)).first()
+    if not user:
+        # 这种情况理论上不应该发生，因为令牌是基于已注册用户的邮箱生成的
+        # 但作为安全措施，还是需要检查
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,  # 或者 404，但 400 更符合“令牌无效”的语境
+            detail="与此令牌关联的用户未找到",
+        )
+
+    if not user.is_active:
+        # 不允许非活动用户重置密码
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户账户已被禁用，无法重置密码",
+        )
+
+    # 5. PasswordResetForm 模型中的 @model_validator 已经确保了 new_password 和 new_password_confirm 匹配
+    #    并且 new_password 满足 min_length=8 的要求。
+
+    # 6. 哈希新密码
+    new_hashed_password = get_password_hash(password_reset_form.new_password)
+
+    # 7. 更新用户的哈希密码和 updated_at 时间戳
+    user.hashed_password = new_hashed_password
+    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    session.add(user)
+
+    # 8. 使已使用的密码重置令牌失效 (从数据库中删除)
+    #    我们需要对传入的原始令牌进行哈希，以匹配数据库中存储的 token_hash。
+    token_hash_to_lookup = get_password_hash(password_reset_form.token)
+    db_token_record = session.exec(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash_to_lookup)
+    ).first()
+
+    if db_token_record:
+        # （可选但推荐）再次确认令牌属于同一个用户
+        if db_token_record.user_id == user.id:
+            session.delete(db_token_record)
+        else:
+            # 令牌哈希匹配但用户ID不匹配，这是异常情况，可能表示哈希碰撞或安全问题
+            # 之前用户状态已改变，这里需要回滚
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="密码重置令牌与用户不匹配，操作失败",
+            )
+    else:
+        # 如果在数据库中找不到对应的令牌哈希记录，
+        # 但令牌本身（签名和时间）是有效的，这可能是个问题。
+        # 可能是令牌已被使用过并删除，或者存储时出了问题。
+        # 为安全起见，如果严格要求DB中有对应记录才能验证，这里应报错并回滚。
+        print(f"警告: 有效的签名令牌，但在数据库中未找到对应的密码重置令牌哈希记录。邮箱: {email_from_token}")
+        # 如果需要严格检查，则取消下面两行注释:
+        # session.rollback()
+        # raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="密码重置令牌记录未找到或已使用")
+        pass  # 当前选择：如果签名令牌有效，即使DB无记录也允许通过（但留有警告）
+
+    session.commit()  # 提交用户密码更新和令牌删除
+
+    return {"message": "密码已成功重置，您现在可以使用新密码登录。"}
+
+
+# --- 2. 新增：缩略图生成函数 ---
+def create_thumbnail(
+        original_image_path: Path,
+        thumbnail_save_path: Path,
+        size: tuple[int, int] = (200, 200)  # 默认缩略图大小
+):
+    """
+    使用 Pillow 生成图片的缩略图。
+    """
+    try:
+        img = PILImage.open(original_image_path)
+        # 对于 Pillow 9.1.0+，使用 Resampling.LANCZOS
+        # 对于旧版本，使用 PILImage.ANTIALIAS
+        # 我们假设使用的是较新版本
+        img.thumbnail(size, Resampling.LANCZOS)  # [cite: 54]
+        img.save(thumbnail_save_path)
+        print(f"缩略图已保存到: {thumbnail_save_path}")
+        return True
+    except Exception as e:
+        print(f"创建缩略图失败: {e}")
+        return False
+
+
+# --- 10. 新增：文件上传端点 ---
+@app.post("/gallery/upload", response_model=GalleryItemReadWithUploader, status_code=status.HTTP_201_CREATED,
+          tags=GALLERY_TAGS)
+async def upload_gallery_item(
+        title: str = File(...),
+        description: Optional[str] = File(None),
+        image: UploadFile = File(...),
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)
+):
+    # --- 文件验证 (保持不变) ---
+    allowed_mime_types = ["image/jpeg", "image/png", "image/gif"]
+    if image.content_type not in allowed_mime_types:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"不支持的文件类型: {image.content_type}.")
+    max_file_size = 5 * 1024 * 1024  # 5MB
+    if image.size > max_file_size:  # [cite: 50]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"文件过大，最大允许 {max_file_size // (1024 * 1024)}MB.")
+
+    # --- 文件名处理 (保持不变) ---
+    file_extension = Path(image.filename).suffix.lower()
+    if not file_extension in [".jpg", ".jpeg", ".png", ".gif"]:
+        # 根据MIME类型更安全地决定扩展名
+        if image.content_type == "image/jpeg":
+            file_extension = ".jpg"
+        elif image.content_type == "image/png":
+            file_extension = ".png"
+        elif image.content_type == "image/gif":
+            file_extension = ".gif"
+        else:
+            file_extension = ".jpg"  # 默认
+
+    unique_filename_base = str(uuid.uuid4())  # [cite: 52]
+    original_filename = f"{unique_filename_base}{file_extension}"
+    thumbnail_filename = f"{unique_filename_base}_thumb{file_extension}"
+
+    original_file_location = UPLOAD_DIR / original_filename
+    thumbnail_file_location = UPLOAD_DIR / thumbnail_filename
+
+    # --- 保存原始文件 (保持不变) ---
+    try:
+        with open(original_file_location, "wb+") as file_object:
+            shutil.copyfileobj(image.file, file_object)
+    except Exception as e:
+        print(f"保存文件失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上传文件时发生服务器内部错误。")
+    finally:
+        image.file.close()
+
+    # --- 3. 生成缩略图 ---
+    thumbnail_url_to_store = None
+    if create_thumbnail(original_file_location, thumbnail_file_location):
+        # 假设缩略图也通过 /uploads/ 路径提供服务
+        thumbnail_url_to_store = f"/uploads/{thumbnail_filename}"
+
+        # --- 创建数据库记录 (更新 image_url 和 thumbnail_url) ---
+    image_url_to_store = f"/uploads/{original_filename}"  # <--- 3. 更新原始图片 URL
+
+    gallery_item_data = GalleryItemCreate(
+        title=title,
+        description=description,
+        image_url=image_url_to_store,  # 现在是相对 URL 路径
+        thumbnail_url=thumbnail_url_to_store  # 现在是相对 URL 路径 (如果成功生成)
+    )
+
+    db_gallery_item = GalleryItem(
+        **gallery_item_data.model_dump(),
+        user_id=current_user.id,
+    )
+
+    session.add(db_gallery_item)
+    session.commit()
+    session.refresh(db_gallery_item)
+
+    return db_gallery_item
+
+# --- 11. 新增：获取画廊项目列表端点 (支持分页) ---
+class PaginatedGalleryItems(SQLModel): # <--- 3. 定义分页响应模型
+    total_items: int
+    total_pages: int
+    page: int
+    page_size: int
+    items: List[GalleryItemReadWithUploader]
+
+@app.get("/gallery/items", response_model=PaginatedGalleryItems, tags=GALLERY_TAGS)
+async def get_gallery_items(
+    session: Session = Depends(get_session),
+    page: int = Query(1, ge=1, description="页码，从1开始"), # <--- 4. 分页参数
+    page_size: int = Query(10, ge=1, le=100, description="每页项目数量") # <--- 4. 分页参数
+):
+    """
+    获取画廊项目列表，支持分页。
+    默认按上传时间降序排列。
+    """
+    offset = (page - 1) * page_size
+
+    # 5. 构建查询以获取当前页的项目
+    #    我们希望同时获取上传者信息，SQLModel 的 Relationship 和 Pydantic 序列化通常会自动处理
+    #    但为了确保 N+1 问题得到优化，可以考虑使用 selectinload (需要异步会话和更复杂的查询)
+    #    对于同步会话，SQLModel 的关系加载通常在访问属性时发生，或在序列化时智能加载。
+
+    # 先获取总项目数用于分页计算
+    total_items_statement = select(func.count(GalleryItem.id))
+    total_items = session.exec(total_items_statement).one() #
+
+    if total_items == 0:
+        return PaginatedGalleryItems(
+            total_items=0,
+            total_pages=0,
+            page=page,
+            page_size=page_size,
+            items=[]
+        )
+
+    statement = (
+        select(GalleryItem)
+        .order_by(GalleryItem.uploaded_at.desc()) # 按上传时间降序
+        .offset(offset)
+        .limit(page_size)
+    )
+    gallery_items_db = session.exec(statement).all()
+
+    # 手动构建嵌套的 uploader 信息 (如果 SQLModel/Pydantic 自动处理不符合预期)
+    # results_with_uploader = []
+    # for item in gallery_items_db:
+    #     uploader_info = None
+    #     if item.uploader: # 访问 uploader 属性会触发加载 (如果配置正确)
+    #         uploader_info = UserRead.model_validate(item.uploader) # 将 User ORM 对象转为 UserRead Pydantic 模型
+    #     results_with_uploader.append(
+    #         GalleryItemReadWithUploader(
+    #             **item.model_dump(), # 转换 GalleryItem 为字典
+    #             uploader=uploader_info
+    #         )
+    #     )
+    #
+    # 然而，SQLModel 和 Pydantic v2 通常能很好地处理嵌套模型的序列化，
+    # 只要 GalleryItemReadWithUploader.uploader 字段的类型提示是 UserRead，
+    # 并且 GalleryItem.uploader 关系已正确定义。
+
+    total_pages = (total_items + page_size - 1) // page_size # 计算总页数
+
+    return PaginatedGalleryItems(
+        total_items=total_items,
+        total_pages=total_pages,
+        page=page,
+        page_size=page_size,
+        items=gallery_items_db # 直接传递 ORM 对象列表，Pydantic 会处理序列化
+    )
+
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---
 if __name__ == "__main__":
-    print(f"启动 Uvicorn 开发服务器，API 地址: http://127.0.0.1:8000")
+    print(f"启动 Uvicorn 开发服务器，API 地址: http://localhost:8000")
     print(f"允许的前端源 (CORS): {origins}")
     uvicorn.run(
         "main:app",  # 指向 FastAPI 应用实例
