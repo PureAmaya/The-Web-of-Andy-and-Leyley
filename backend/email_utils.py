@@ -3,7 +3,7 @@ from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
 import logging
 
-from core.config import settings  # 导入配置
+from backend.core.config import settings  # 导入配置
 
 # 1. 创建邮件连接配置
 mail_conf = ConnectionConfig(

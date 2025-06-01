@@ -1,46 +1,83 @@
-﻿# core/config.py
+﻿# backend/core/config.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import EmailStr
-from pathlib import Path # <--- 1. 导入 Path
+from pydantic import EmailStr, validator
+from pathlib import Path
+from typing import List, Optional  # 确保导入 List, Optional
 
-# 2. 定义 .env 文件的路径
-#    Path(__file__) 是当前 config.py 文件的路径
-#    .parent 是父目录 (即 core/ 文件夹)
-#    .parent.parent 是父目录的父目录 (即 backend/ 文件夹)
-#    然后我们在这个 backend/ 目录下寻找 .env 文件
 ENV_PATH = Path(__file__).parent.parent / ".env"
 
+
+# --- 添加调试打印 ---
+print(f"DEBUG: [config.py] __file__ is: {__file__}")
+print(f"DEBUG: [config.py] Calculated ENV_PATH: {ENV_PATH}")
+print(f"DEBUG: [config.py] Does .env file exist at ENV_PATH? {ENV_PATH.exists()}")
+if ENV_PATH.exists():
+    try:
+        with open(ENV_PATH, "r", encoding="utf-8") as f:
+            print(f"DEBUG: [config.py] Content of .env file (first few lines):")
+            for i, line in enumerate(f):
+                if i < 15: # 只打印前15行以避免过长的输出
+                    print(f"  {line.strip()}")
+                else:
+                    break
+    except Exception as e:
+        print(f"DEBUG: [config.py] Error reading .env file: {e}")
+# --- 结束调试打印 ---
+
 class Settings(BaseSettings):
-    # 邮件配置
+    # 邮件配置 (保持不变)
     MAIL_USERNAME: EmailStr = "your_email_username@example.com"
     MAIL_PASSWORD: str = "your_super_secret_email_password"
     MAIL_FROM: EmailStr = "noreply@example.com"
-    MAIL_PORT: int = 587  # 通常是 587 (TLS) 或 465 (SSL)
-    MAIL_SERVER: str = "smtp.example.com" # 你的邮件服务器地址
-    MAIL_STARTTLS: bool = True # 如果 MAIL_PORT 是 587，通常为 True
-    MAIL_SSL_TLS: bool = False # 如果 MAIL_PORT 是 465，通常为 True
+    MAIL_PORT: int = 587
+    MAIL_SERVER: str = "smtp.example.com"
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
     MAIL_FROM_NAME: str = "我的门户网站"
 
-    # 邮件验证令牌相关 (从 auth_utils.py 移到这里集中管理更佳)
-    EMAIL_VERIFICATION_SECRET_KEY: str = "a-very-secret-key-for-email-that-should-be-in-env"
-    EMAIL_VERIFICATION_SALT: str = "email-verification-salt-that-should-be-in-env"
+    # 邮件验证令牌相关 (保持不变)
+    EMAIL_VERIFICATION_SECRET_KEY: str
+    EMAIL_VERIFICATION_SALT: str
     EMAIL_TOKEN_MAX_AGE_SECONDS: int = 3600
 
-    # 门户网站前端基础 URL (用于构建验证链接)
-    # 例如：Vue.js 前端运行在 http://localhost:5173
+    # 门户网站前端基础 URL (保持不变)
     PORTAL_FRONTEND_BASE_URL: str = "http://localhost:5173"
 
-    # --- 新增：密码重置令牌配置 ---
-    PASSWORD_RESET_SECRET_KEY: str = "a-very-secret-key-for-password-reset"  # 必须非常强壮且保密
-    PASSWORD_RESET_SALT: str = "password-reset-salt"  # 独立的盐值
-    PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS: int = 900  # 密码重置令牌有效期，例如15分钟 (900秒)
+    # 密码重置令牌配置 (保持不变)
+    PASSWORD_RESET_SECRET_KEY: str
+    PASSWORD_RESET_SALT: str
+    PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS: int = 900
 
-    # JWT 密钥 (为未来登录功能预留)
-    JWT_SECRET_KEY: str = "jwt-secret-key-example"
-    JWT_REFRESH_SECRET_KEY: str = "jwt-refresh-secret-key-example"
+    # JWT 密钥 (保持不变)
+    JWT_SECRET_KEY: str
+    JWT_REFRESH_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # --- 新增/修改：PostgreSQL 配置 ---
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_SERVER: str
+    POSTGRES_PORT: str = "5432"
+    POSTGRES_DB: str
+
+    # 使用 @property 来动态构建数据库 URL
+    _ASYNC_DATABASE_URL: Optional[str] = None
+    _SYNC_DATABASE_URL: Optional[str] = None
+
+    @property
+    def ASYNC_DATABASE_URL(self) -> str:
+        if self._ASYNC_DATABASE_URL is None:
+            self._ASYNC_DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return self._ASYNC_DATABASE_URL
+
+    @property
+    def SYNC_DATABASE_URL(self) -> str:  # 同步URL，用于 Alembic 或 create_tables.py
+        if self._SYNC_DATABASE_URL is None:
+            # psycopg2 (binary) 驱动的连接字符串通常只是 "postgresql://"
+            self._SYNC_DATABASE_URL = f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return self._SYNC_DATABASE_URL
 
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,
@@ -48,11 +85,11 @@ class Settings(BaseSettings):
         extra='ignore'
     )
 
-settings = Settings()
 
-# 为了方便，确保 auth_utils.py 中的令牌配置也使用这里的 settings 对象
-# 例如，在 auth_utils.py 中:
-# from core.config import settings
-# EMAIL_VERIFICATION_SECRET_KEY = settings.EMAIL_VERIFICATION_SECRET_KEY
-# EMAIL_VERIFICATION_SALT = settings.EMAIL_VERIFICATION_SALT
-# EMAIL_VERIFICATION_TOKEN_MAX_AGE_SECONDS = settings.EMAIL_TOKEN_MAX_AGE_SECONDS
+try:
+    settings = Settings()
+    print("DEBUG: [config.py] Settings object created successfully.")
+    print(f"DEBUG: [config.py] Loaded POSTGRES_USER from settings: {settings.POSTGRES_USER}")
+except Exception as e:
+    print(f"DEBUG: [config.py] Error creating Settings instance: {e}")
+    raise # 重新抛出异常，以便看到原始的 Pydantic 错误
