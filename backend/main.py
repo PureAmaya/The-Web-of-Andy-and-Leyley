@@ -330,12 +330,22 @@ async def reset_password(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="密码重置令牌与用户不匹配，操作失败")
     else:
         # 如果令牌本身有效，但DB中无记录，可能已被使用。出于安全，通常应报错。
-        session.rollback()  # 回滚密码更改
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="密码重置令牌记录未找到或已使用")
+        session.rollback()  # 回滚对 user 对象的任何未提交更改（如密码更新）
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码重置令牌记录未找到或可能已被使用。请重新请求密码重置。"
+        )
 
-    session.commit()
+    try:
+        session.commit()
+        # session.refresh(user) # refresh user 不是必须的，因为我们只返回消息
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新密码或提交事务时发生内部错误: {e}"  # 细化错误信息
+        )
     return {"message": "密码已成功重置，您现在可以使用新密码登录。"}
-
 
 # --- 用户信息管理端点 ---
 USERS_TAGS = ["Users"]
