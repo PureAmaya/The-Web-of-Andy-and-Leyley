@@ -31,7 +31,8 @@ from backend.models import (
     PasswordResetForm,
     GalleryItemCreate,
     GalleryItem,
-    GalleryItemReadWithUploader  # 用于画廊API响应
+    GalleryItemUpdate,  # 你可能需要创建一个用于更新的模型
+    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate  # 使用新的响应模型
 )
 from backend.auth_utils import (
     get_password_hash,
@@ -78,7 +79,6 @@ configured_origins = [
     "http://localhost",
     "http://localhost:8080",
     "http://localhost:5173",
-    "http://localhost:63342",  # 根据您之前的反馈添加
 ]
 allow_origins_list = list(set(o for o in configured_origins if o))
 if not allow_origins_list:
@@ -104,7 +104,6 @@ async def read_root():
 
 # --- 认证相关端点 ---
 AUTH_TAGS = ["Authentication"]
-
 
 @app.post("/auth/register", response_model=UserRead, status_code=status.HTTP_201_CREATED, tags=AUTH_TAGS)
 async def register_user(
@@ -417,15 +416,16 @@ def create_thumbnail(
         return False
 
 
-@app.post("/gallery/upload", response_model=GalleryItemReadWithUploader, status_code=status.HTTP_201_CREATED,
-          tags=GALLERY_TAGS)
+@app.post("/gallery/upload", response_model=GalleryItemReadWithBuilder, status_code=status.HTTP_201_CREATED, tags=GALLERY_TAGS)
 async def upload_gallery_item(
         title: str = File(...),
+        builder_name: str = File(...), # 新增：接收建筑者/创作者名称
         description: Optional[str] = File(None),
         image: UploadFile = File(...),
         session: Session = Depends(get_session),
         current_user: User = Depends(get_current_active_user)
 ):
+
     allowed_mime_types = ["image/jpeg", "image/png", "image/gif"]
     if image.content_type not in allowed_mime_types:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"不支持的文件类型: {image.content_type}.")
@@ -446,6 +446,15 @@ async def upload_gallery_item(
 
     original_file_location = UPLOAD_DIR / original_filename
     thumbnail_file_location = UPLOAD_DIR / thumbnail_filename
+
+    # --- 新增：Get-or-Create 成员逻辑 ---
+    member = session.exec(select(Member).where(func.lower(Member.name) == func.lower(builder_name))).first()
+    if not member:
+        # 如果成员不存在，则创建一个新的
+        member = Member(name=builder_name)
+        session.add(member)
+        session.commit()
+        session.refresh(member)
 
     try:
         with open(original_file_location, "wb+") as file_object:
@@ -484,7 +493,7 @@ class PaginatedGalleryItems(SQLModel):
     total_pages: int
     page: int
     page_size: int
-    items: List[GalleryItemReadWithUploader]
+    items: List[GalleryItemReadWithBuilder]
 
 
 @app.get("/gallery/items", response_model=PaginatedGalleryItems, tags=GALLERY_TAGS)
@@ -494,15 +503,6 @@ async def get_gallery_items(
         page_size: int = Query(10, ge=1, le=100, description="每页项目数量")
 ):
     offset = (page - 1) * page_size
-
-    # 之前用于调试的打印语句可以保留或移除
-    # print(f"--- DEBUG INFO ---")
-    # print(f"SQLModel version being used: {sqlmodel.__version__}")
-    # print(f"Type of 'session' object: {type(session)}")
-    # print(f"Is 'session' an instance of SQLModelSession? {isinstance(session, sqlmodel.Session)}") # 使用 sqlmodel.Session
-    # print(f"Is 'session' an instance of SQLAlchemySession? {isinstance(session, SQLAlchemySession)}") # 需要从 sqlalchemy.orm import Session as SQLAlchemySession
-    # print(f"Attributes of 'session': {dir(session)}")
-    # print(f"--- END DEBUG INFO ---")
 
     total_items_statement = select(func.count(GalleryItem.id))
 
@@ -535,6 +535,121 @@ async def get_gallery_items(
         page_size=page_size,
         items=gallery_items_db
     )
+
+
+# --- 新增：画廊项目管理端点 (更新和删除) ---
+class GalleryItemUpdate(SQLModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    # 可以添加修改 builder 的逻辑
+    # builder_name: Optional[str] = None
+
+
+@app.patch("/gallery/items/{item_id}", response_model=GalleryItemReadWithBuilder, tags=GALLERY_TAGS)
+async def update_gallery_item(
+        item_id: int,
+        item_update: GalleryItemUpdate,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)
+):
+    db_item = session.get(GalleryItem, item_id)
+    if not db_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目未找到")
+
+    # 权限检查：只有上传者才能修改 (未来可以扩展为管理员)
+    if db_item.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权修改此项目")
+
+    update_data = item_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_item, key, value)
+
+    db_item.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    session.add(db_item)
+    session.commit()
+    session.refresh(db_item)
+    return db_item
+
+
+@app.delete("/gallery/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, tags=GALLERY_TAGS)
+async def delete_gallery_item(
+        item_id: int,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)
+):
+    db_item = session.get(GalleryItem, item_id)
+    if not db_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目未找到")
+
+    if db_item.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除此项目")
+
+    session.delete(db_item)
+    session.commit()
+    return
+
+
+# --- 新增：成员管理端点 ---
+MEMBERS_TAGS = ["Members"]
+
+
+@app.post("/members", response_model=MemberRead, tags=MEMBERS_TAGS, status_code=status.HTTP_201_CREATED)
+async def create_member(
+        member_data: MemberCreate,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)  # 保护端点
+):
+    # 检查名称是否已存在
+    existing_member = session.exec(select(Member).where(Member.name == member_data.name)).first()
+    if existing_member:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该名称的成员已存在")
+
+    db_member = Member.model_validate(member_data)
+    session.add(db_member)
+    session.commit()
+    session.refresh(db_member)
+    return db_member
+
+
+@app.get("/members", response_model=List[MemberRead], tags=MEMBERS_TAGS)
+async def get_all_members(session: Session = Depends(get_session)):
+    members = session.exec(select(Member)).all()
+    return members
+
+
+@app.patch("/members/{member_id}", response_model=MemberRead, tags=MEMBERS_TAGS)
+async def update_member(
+        member_id: int,
+        member_update: MemberUpdate,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)  # 保护端点
+):
+    db_member = session.get(Member, member_id)
+    if not db_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
+
+    update_data = member_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_member, key, value)
+
+    session.add(db_member)
+    session.commit()
+    session.refresh(db_member)
+    return db_member
+
+
+@app.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, tags=MEMBERS_TAGS)
+async def delete_member(
+        member_id: int,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_active_user)  # 保护端点
+):
+    db_member = session.get(Member, member_id)
+    if not db_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
+    session.delete(db_member)
+    session.commit()
+    return
 
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---

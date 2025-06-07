@@ -1,30 +1,33 @@
 ﻿// src/stores/settings.js
-import { defineStore } from 'pinia';
-import { ref, watch, onMounted } from 'vue'; // 导入 onMounted
+import {defineStore} from 'pinia';
+import {ref, watch, onMounted} from 'vue'; // 导入 onMounted
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000';
 
 // 定义两套颜色主题的变量值
 const lightThemeColors = { // "安迪和莉莉的棺材" 风格的日间模式
-  '--main-bg-color': '#e8e3d9',        // 米白色/亚麻色背景 (取代之前的 #f0f0f0)
-  '--secondary-bg-color': '#d1ccc0',   // 稍深一点的米色/浅褐色背景 (取代之前的 #ffffff)
-  '--main-text-color': '#4a3f35',      // 深棕色/暗褐色文字 (取代之前的 #2c3e50)
-  '--border-color': '#a8a092',         // 较深的米色/灰褐色边框 (取代之前的 #dcdcdc)
-  '--link-color': '#6e5f50',           // 暗哑的棕色链接 (取代之前的 #3498db)
-  '--link-hover-color': '#8a7a6a',     // 链接悬停时稍亮一些 (取代之前的 #2980b9)
-  '--primary-accent-color': '#8c4343', // 更加不饱和/暗沉的红色作为强调色 (取代之前的 #e74c3c)
-  // 您可以根据需要为日间模式定义或调整更多变量
-  // 例如，按钮的特定背景色、文字颜色等，如果它们与暗色模式下有显著不同的话
+    '--main-bg-color': '#e8e3d9',        // 米白色/亚麻色背景 (取代之前的 #f0f0f0)
+    '--secondary-bg-color': '#d1ccc0',   // 稍深一点的米色/浅褐色背景 (取代之前的 #ffffff)
+    '--main-text-color': '#4a3f35',      // 深棕色/暗褐色文字 (取代之前的 #2c3e50)
+    '--border-color': '#a8a092',         // 较深的米色/灰褐色边框 (取代之前的 #dcdcdc)
+    '--link-color': '#6e5f50',           // 暗哑的棕色链接 (取代之前的 #3498db)
+    '--link-hover-color': '#8a7a6a',     // 链接悬停时稍亮一些 (取代之前的 #2980b9)
+    '--primary-accent-color': '#8c4343', // 更加不饱和/暗沉的红色作为强调色 (取代之前的 #e74c3c)
+    // 您可以根据需要为日间模式定义或调整更多变量
+    // 例如，按钮的特定背景色、文字颜色等，如果它们与暗色模式下有显著不同的话
 };
 
-const darkThemeColors = { // 我们之前为“安迪和莉莉的棺材”风格定义的暗色主题
-  '--main-bg-color': '#1a1a1a',
-  '--secondary-bg-color': '#2b2b2b',
-  '--main-text-color': '#e0e0e0',
-  '--border-color': '#444',
-  '--link-color': '#c0c0c0',
-  '--link-hover-color': '#ffffff',
-  '--primary-accent-color': '#7f0000', // 暗红色
+const darkThemeColors = {
+    '--main-bg-color': '#1a1a1a',          // 深灰背景
+    '--secondary-bg-color': '#2b2b2b',   // 稍亮的灰色
+    '--main-text-color': '#e0e0e0',       // 浅灰色文字
+    '--border-color': '#444',            // 边框颜色
+    '--link-color': '#c0c0c0',           // 链接颜色
+    '--link-hover-color': '#ffffff',     // 链接悬停 - 白色
+    '--primary-accent-color': '#9e1c1c', // 核心点缀色 - 暗红色
+
+    '--font-main': '"Kalam", "Noto Sans SC", sans-serif',
+    '--font-special': '"Special Elite", "Noto Sans SC", cursive',
 };
 
 // ... (useSettingsStore 的其余部分保持不变) ...
@@ -44,6 +47,7 @@ export const useSettingsStore = defineStore('settings', () => {
             apiBaseUrl.value = DEFAULT_API_BASE_URL;
         }
     }
+
     watch(apiBaseUrl, (newUrlValue) => {
         localStorage.setItem('api_base_url', newUrlValue);
     });

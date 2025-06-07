@@ -11,7 +11,7 @@ from database import create_db_and_tables_sync # 使用新的同步创建函数
 # from database import create_db_and_tables_sync, settings # 可能需要 settings 来打印DB名
 
 # !!! 非常重要：在这里导入所有定义了 table=True 的模型 !!!
-from models import User, VerificationToken, PasswordResetToken, GalleryItem
+from models import User, VerificationToken, PasswordResetToken, GalleryItem, Member
 
 def init_db(delete_existing_db: bool = False): # delete_existing_db 对PostgreSQL意义不大
     print("开始初始化 PostgreSQL 数据库表...")

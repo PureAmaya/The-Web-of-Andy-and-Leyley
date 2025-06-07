@@ -6,7 +6,7 @@
           <RouterLink to="/">莉莉和安迪的门户</RouterLink>
         </div>
         <nav class="main-nav">
-          <RouterLink to="/" class="nav-link">画廊</RouterLink>
+          <RouterLink to="/gallery" class="nav-link">画廊</RouterLink>
           <RouterLink v-if="authStore.isLoggedIn" to="/upload" class="nav-link">上传作品</RouterLink>
 
           <template v-if="authStore.isLoggedIn">
@@ -14,10 +14,6 @@
               {{ authStore.user?.username || '档案' }}
             </RouterLink>
             <button @click="handleLogout" class="nav-button logout-button">离去</button>
-          </template>
-          <template v-else>
-            <RouterLink to="/login" class="nav-link">登录</RouterLink>
-            <RouterLink to="/register" class="nav-link">注册</RouterLink>
           </template>
         </nav>
 
@@ -33,33 +29,19 @@
     </header>
 
     <main class="app-content">
-      <RouterView />
+      <RouterView/>
     </main>
 
     <footer class="app-footer">
       <div class="footer-content">
         <p>&copy; {{ new Date().getFullYear() }} L&A. All rights reserved.</p>
-        <div class="api-config-section">
-          <div class="api-url-input-group">
-            <label for="api-url-input">后端 API 地址:</label>
-            <input type="text" id="api-url-input" v-model="editableApiUrl" placeholder="例如: http://localhost:8000" />
-            <button @click="saveApiUrl" class="api-button save-button">保存</button>
-            <button @click="resetApiUrl" class="api-button reset-button" title="恢复默认值">重置</button>
-          </div>
-          <button @click="testApiConnection" class="api-button test-button" :disabled="isTestingConnection">
-            {{ isTestingConnection ? '测试中...' : '测试连接' }}
-          </button>
-          <p v-if="testConnectionMessage" :class="['connection-status', testConnectionStatus]">
-            {{ testConnectionMessage }}
-          </p>
-        </div>
+
       </div>
     </footer>
   </div>
 </template>
 
 <script setup>
-// ... (script setup 部分大部分保持不变)
 import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
@@ -69,17 +51,9 @@ const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
 
-const editableApiUrl = ref(settingsStore.apiBaseUrl);
-const isTestingConnection = ref(false);
-const testConnectionMessage = ref('');
-const testConnectionStatus = ref('');
+// --- API 设置相关的 ref 和函数已被删除 ---
 const selectedTheme = ref(settingsStore.theme);
 
-watch(() => settingsStore.apiBaseUrl, (newUrl) => {
-  if (editableApiUrl.value !== newUrl) {
-    editableApiUrl.value = newUrl;
-  }
-});
 watch(() => settingsStore.theme, (newThemePreference) => {
     if (selectedTheme.value !== newThemePreference) {
         selectedTheme.value = newThemePreference;
@@ -97,54 +71,42 @@ onMounted(async () => {
 function handleLogout() {
   authStore.logout();
 }
-function saveApiUrl() {
-  settingsStore.setApiBaseUrl(editableApiUrl.value);
-  testConnectionMessage.value = 'API 地址已更新并保存！';
-  testConnectionStatus.value = 'success';
-  setTimeout(() => testConnectionMessage.value = '', 3000);
-}
-function resetApiUrl() {
-    settingsStore.setApiBaseUrl(settingsStore.DEFAULT_API_BASE_URL);
-    editableApiUrl.value = settingsStore.apiBaseUrl;
-    testConnectionMessage.value = 'API 地址已重置为默认值！';
-    testConnectionStatus.value = 'success';
-    setTimeout(() => testConnectionMessage.value = '', 3000);
-}
-async function testApiConnection() {
-  isTestingConnection.value = true;
-  testConnectionMessage.value = '';
-  testConnectionStatus.value = '';
-  const urlToTest = settingsStore.apiBaseUrl;
-  if (!urlToTest) {
-    testConnectionMessage.value = 'API 地址不能为空。';
-    testConnectionStatus.value = 'error';
-    isTestingConnection.value = false;
-    return;
-  }
-  try {
-    const response = await fetch(urlToTest);
-    if (response.ok) {
-      testConnectionMessage.value = `连接成功！(状态码: ${response.status})`;
-      testConnectionStatus.value = 'success';
-    } else {
-      testConnectionMessage.value = `连接失败。状态码: ${response.status}.`;
-      testConnectionStatus.value = 'error';
-    }
-  } catch (error) {
-    testConnectionMessage.value = `连接出错: ${error.message}.`;
-    testConnectionStatus.value = 'error';
-  } finally {
-    isTestingConnection.value = false;
-  }
-}
+
 function onThemeChange() {
   settingsStore.setTheme(selectedTheme.value);
 }
 </script>
 
 <style scoped>
-/* ... (App.vue 的样式保持不变) ... */
-/* 确保 main-nav 的样式能容纳新的链接 */
+/* 将噪点效果的样式添加到 App.vue 的 <style> 块中 */
+@keyframes noiseAnimation {
+  0% { transform: translate(0,0); }
+  10% { transform: translate(-5%,-5%); }
+  20% { transform: translate(-10%,5%); }
+  30% { transform: translate(5%,-10%); }
+  40% { transform: translate(-5%,15%); }
+  50% { transform: translate(-10%,-5%); }
+  60% { transform: translate(15%,0); }
+  70% { transform: translate(0,10%); }
+  80% { transform: translate(-15%,0); }
+  90% { transform: translate(10%,5%); }
+  100% { transform: translate(5%,0); }
+}
+
+.noise-overlay {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  z-index: 1001; /* 确保在最顶层 */
+  pointer-events: none; /* 让鼠标可以点击下层元素 */
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4d5eXlzc3OLi4ubm5uVlZWPj4+NjY19fX2JiYl/f39tbW1paWhzc3NwcDBvCustomizeable Preview...b29sbm5uZmZmamZn/iDYGAAAAR0lEQVR42qzAQAMAwUAwA2KO/p9v+wpr3RA6QJLh7AENLmMQ+xHyL9uG6w0cBF93W/2wA3h2jgHWfPDeBvFenqgIA695gAAAAAElFTkSuQmCC');
+  opacity: 0.08;
+  animation: noiseAnimation .2s infinite;
+}
+
+
 .main-nav {
   display: flex;
   align-items: center;
@@ -152,6 +114,7 @@ function onThemeChange() {
   margin-right: auto;
   flex-wrap: wrap; /* 允许导航在空间不足时换行 */
 }
+
 /* 其他样式 ... */
 #app-layout {
   display: flex;
@@ -212,16 +175,19 @@ function onThemeChange() {
   font-size: 0.9rem;
   white-space: nowrap;
 }
+
 .nav-button.logout-button:hover {
   background-color: var(--primary-accent-color);
   color: var(--main-text-color);
   border-color: var(--primary-accent-color);
 }
+
 .theme-switcher {
   margin-left: 20px;
   display: flex;
   align-items: center;
 }
+
 .theme-switcher label.visually-hidden {
   position: absolute;
   width: 1px;
@@ -233,6 +199,7 @@ function onThemeChange() {
   white-space: nowrap;
   border-width: 0;
 }
+
 .theme-switcher select {
   background-color: var(--secondary-bg-color);
   color: var(--main-text-color);
@@ -243,13 +210,16 @@ function onThemeChange() {
   cursor: pointer;
   outline-color: var(--primary-accent-color);
 }
+
 .theme-switcher select:focus {
-    border-color: var(--primary-accent-color);
+  border-color: var(--primary-accent-color);
 }
+
 .app-content {
   flex-grow: 1;
   padding: 20px;
 }
+
 .app-footer {
   background-color: var(--secondary-bg-color);
   color: #888;
@@ -259,11 +229,13 @@ function onThemeChange() {
   margin-top: auto;
   font-size: 0.8rem;
 }
+
 .footer-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
 }
+
 .api-config-section {
   margin-top: 15px;
   padding-top: 15px;
@@ -273,6 +245,7 @@ function onThemeChange() {
   align-items: center;
   gap: 10px;
 }
+
 .api-url-input-group {
   display: flex;
   align-items: center;
@@ -280,29 +253,37 @@ function onThemeChange() {
   flex-wrap: wrap;
   justify-content: center;
 }
+
 .api-config-section label {
   font-size: 0.9em;
   color: var(--link-color);
 }
+
 .api-button.save-button {
   background-color: #1a6e1a;
 }
+
 .api-button.save-button:hover:not(:disabled) {
   background-color: #124e12;
 }
+
 .api-button.reset-button {
   background-color: #b8860b;
   color: var(--main-text-color);
 }
+
 .api-button.reset-button:hover:not(:disabled) {
   background-color: #8b6508;
 }
+
 .api-button.test-button {
   background-color: #0056b3;
 }
+
 .api-button.test-button:hover:not(:disabled) {
   background-color: #003f80;
 }
+
 .connection-status {
   font-size: 0.85em;
   margin-top: 5px;
@@ -312,11 +293,13 @@ function onThemeChange() {
   min-height: 1.5em;
   border: 1px solid transparent;
 }
+
 .connection-status.success {
   color: #a3d9b1;
   background-color: rgba(40, 167, 69, 0.2);
   border-color: #28a745;
 }
+
 .connection-status.error {
   color: #f8d7da;
   background-color: rgba(220, 53, 69, 0.2);

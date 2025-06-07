@@ -226,10 +226,41 @@ class RefreshTokenRequest(SQLModel):
     refresh_token: str = Field(description="用户持有的刷新令牌")
 
 
+# --- 新增：成员模型 ---
+
+class MemberBase(SQLModel):
+    name: str = Field(index=True, unique=True, description="成员名称")
+    role: Optional[str] = Field(default=None, description="角色或职位")
+    avatar_url: Optional[str] = Field(default=None, description="头像链接")
+    bio: Optional[str] = Field(default=None, description="个人简介")
+    # 未来可以添加更多字段，如社交链接等
+
+
+class Member(MemberBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    gallery_items: List["GalleryItem"] = Relationship(back_populates="builder")
+
+    __table_args__ = {'extend_existing': True}
+
+
+class MemberCreate(MemberBase):
+    pass
+
+
+class MemberRead(MemberBase):
+    id: int
+
+
+class MemberUpdate(SQLModel):
+    # 所有字段都是可选的
+    role: Optional[str] = None
+    avatar_url: Optional[str] = None
+    bio: Optional[str] = None
+
 # --- 画廊项目模型 ---
 
 class GalleryItemBase(SQLModel):
-    title: str = Field(index=True, description="作品标题") # 普通索引用于查询标题
+    title: str = Field(index=True, description="作品标题")
     description: Optional[str] = Field(default=None, description="作品描述")
     image_url: str = Field(description="图片展示URL")
     thumbnail_url: Optional[str] = Field(default=None, description="缩略图URL")
@@ -239,10 +270,16 @@ class GalleryItem(GalleryItemBase, table=True):
     """
     数据库中的 GalleryItem 表模型。
     """
-    id: Optional[int] = Field(default=None, primary_key=True, description="画廊项目ID，主键")
-    user_id: int = Field(foreign_key="user.id", index=True, description="上传用户的ID")
+    id: Optional[int] = Field(default=None, primary_key=True)
 
-    uploader: Optional["User"] = Relationship(back_populates="gallery_items") # 使用简单字符串引用
+    # 上传者 (进行操作的用户)
+    user_id: int = Field(foreign_key="user.id", index=True, description="上传用户的ID")
+    uploader: Optional["User"] = Relationship(back_populates="gallery_items")
+
+    # 创作者/建筑者 (公开署名的成员) - 新增
+    member_id: Optional[int] = Field(default=None, foreign_key="member.id", index=True,
+                                     description="关联的成员ID (创作者)")
+    builder: Optional["Member"] = Relationship(back_populates="gallery_items")
 
     uploaded_at: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(timezone.utc),
@@ -254,8 +291,6 @@ class GalleryItem(GalleryItemBase, table=True):
         nullable=False,
         description="最后更新时间 (UTC)"
     )
-
-    # 如果 GalleryItem 表没有自己的 UniqueConstraint，可以直接使用字典
     __table_args__ = {'extend_existing': True}
 
 
@@ -267,19 +302,20 @@ class GalleryItemCreate(GalleryItemBase):
 
 
 class GalleryItemRead(GalleryItemBase):
-    """
-    用于从 API 读取/返回画廊项目数据时的响应体模型。
-    """
     id: int
     user_id: int
+    member_id: Optional[int]
     uploaded_at: datetime.datetime
     updated_at: datetime.datetime
-    # 确保 UserRead 中定义了 is_active 和 is_verified 以便正确序列化
-    # 或者在这里定义一个更精简的嵌套 uploader 模型
 
 
-class GalleryItemReadWithUploader(GalleryItemRead):
+# --- 新增：带创作者信息的画廊作品响应模型 ---
+class GalleryItemReadWithBuilder(GalleryItemRead):
+    builder: Optional[MemberRead] = None
+
+
+class GalleryItemUpdate(GalleryItemBase):
     """
-    读取画廊项目时，同时返回上传者的公开信息。
-    """
-    uploader: Optional[UserRead] = None
+       用于更新画廊项目时接收的请求体模型。
+       """
+    pass
