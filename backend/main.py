@@ -1,4 +1,5 @@
 ﻿# backend/main.py
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from sqlalchemy import func  # 确保导入
 from sqlmodel import Session, select, SQLModel  # 确保导入 SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from backend import crud
 # 项目内部模块导入
 # 假设所有这些文件都在 backend 目录或其子目录中，并且 Python 的导入路径能正确解析
 from backend.database import get_session, get_async_session  # create_db_and_tables 不再需要从这里导入
@@ -57,14 +59,26 @@ UPLOAD_DIR = Path(__file__).parent / "uploads"  # 将目录放在 backend 文件
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# 配置日志记录器
+logging.basicConfig(
+    level=logging.INFO,  # 设置日志级别为 INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout) # 输出到控制台
+        # 如果需要，可以添加输出到文件的 Handler
+        # logging.FileHandler("app.log")
+    ]
+)
+# 获取一个日志记录器实例
+logger = logging.getLogger(__name__)
+
+
 # --- FastAPI 应用生命周期管理 ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("应用启动中...")
-    # create_db_and_tables() # 已移至 create_tables.py
-    print("数据库表结构应由 create_tables.py 脚本创建。")
+    logger.info("应用启动中...")
     yield
-    print("应用关闭中...")
+    logger.info("应用关闭中...")
 
 
 app = FastAPI(
@@ -109,242 +123,137 @@ AUTH_TAGS = ["Authentication"]
 async def register_user(
         user_create: UserCreate,
         background_tasks: BackgroundTasks,
-        session: Session = Depends(get_session)
+        session: AsyncSession = Depends(get_async_session)
 ):
-    existing_user_by_username = session.exec(
-        select(User).where(User.username == user_create.username)
-    ).first()
-    if existing_user_by_username:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该用户名已被使用")
-
-    existing_user_by_email = session.exec(
-        select(User).where(User.email == user_create.email)
-    ).first()
-    if existing_user_by_email:
+    if await crud.get_user_by_email(db=session, email=user_create.email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已被注册")
+    if await crud.get_user_by_username(db=session, username=user_create.username):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该用户名已被使用")
+    if user_create.mc_name and await crud.get_user_by_mc_name(db=session, mc_name=user_create.mc_name):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该 Minecraft 用户名已被关联")
 
-    hashed_password = get_password_hash(user_create.password)
-    db_user = User.model_validate(user_create,
-                                  update={"hashed_password": hashed_password, "is_verified": False, "is_active": True})
-    # db_user = User(
-    #     username=user_create.username,
-    #     email=user_create.email,
-    #     hashed_password=hashed_password,
-    #     full_name=user_create.full_name,
-    #     bio=user_create.bio,
-    #     avatar_url=user_create.avatar_url,
-    #     is_active=True,
-    #     is_verified=False,
-    # )
-    session.add(db_user)
-    session.commit()
-    session.refresh(db_user)
+    db_user = await crud.create_user(db=session, user_create=user_create)
 
     try:
-        raw_email_token = generate_email_verification_token(db_user.email)
-        token_hash_for_db = get_password_hash(raw_email_token)
-        expires_delta = datetime.timedelta(seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)
-        token_expires_at = datetime.datetime.now(datetime.timezone.utc) + expires_delta
-
-        verification_token_db = VerificationToken(
+        raw_token = generate_email_verification_token(db_user.email)
+        await crud.create_verification_token(
+            db=session,
             user_id=db_user.id,
-            token_hash=token_hash_for_db,
-            expires_at=token_expires_at
+            token_hash=get_password_hash(raw_token),
+            expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)
         )
-        session.add(verification_token_db)
-        session.commit()
-
-        background_tasks.add_task(
-            send_verification_email,
-            email_to=db_user.email,
-            username=db_user.username,
-            token=raw_email_token
-        )
+        background_tasks.add_task(send_verification_email, email_to=db_user.email, username=db_user.username, token=raw_token)
     except Exception as e:
-        print(f"创建用户 {db_user.username} 后，处理邮件验证时发生错误: {e}")
-        pass
+        logger.error(f"创建用户 {db_user.username} 后，处理邮件验证时发生错误: {e}")
+
     return db_user
 
 
 @app.get("/auth/verify-email", status_code=status.HTTP_200_OK, tags=AUTH_TAGS)
-async def verify_email_address(
-        token: str,
-        session: Session = Depends(get_session)
-):
-    email_from_token = verify_email_verification_token(token)
-    if not email_from_token:
+async def verify_email_address(token: str, session: AsyncSession = Depends(get_async_session)):
+    email = verify_email_verification_token(token)
+    if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无效或已过期的验证令牌")
 
-    user = session.exec(select(User).where(User.email == email_from_token)).first()
+    user = await crud.get_user_by_email(db=session, email=email)
     if not user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="与此令牌关联的用户未找到")
-
     if user.is_verified:
         return {"message": "邮箱已成功验证"}
 
     user.is_verified = True
     user.updated_at = datetime.datetime.now(datetime.timezone.utc)
-    session.add(user)
+    await session.commit()
+    await session.refresh(user)
 
-    token_hash_to_lookup = get_password_hash(token)
-    db_token_record = session.exec(
-        select(VerificationToken).where(VerificationToken.token_hash == token_hash_to_lookup)
-    ).first()
+    db_token = await crud.get_verification_token_by_hash(db=session, token_hash=get_password_hash(token))
+    if db_token:
+        await crud.delete_db_token(db=session, token=db_token)
 
-    if db_token_record:
-        if db_token_record.user_id == user.id:
-            session.delete(db_token_record)
-        else:
-            session.rollback()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证令牌与用户不匹配，验证失败")
-    else:
-        print(f"警告: 有效的签名令牌，但在数据库中未找到对应的验证令牌哈希记录。邮箱: {email_from_token}")
-        # 根据业务需求决定是否依然验证。当前选择：允许。
-
-    session.commit()
-    session.refresh(user)
     return {"message": "邮箱验证成功！您现在可以登录了。"}
 
 
 @app.post("/auth/token", response_model=Token, tags=AUTH_TAGS)
-async def login_for_access_token(
-        form_data: OAuth2PasswordRequestForm = Depends(),
-        session: Session = Depends(get_session)
-):
-    user = session.exec(select(User).where(User.email == form_data.username)).first()
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_async_session)):
+    user = await crud.get_user_by_email(db=session, email=form_data.username)
     if not user:
-        user = session.exec(select(User).where(User.username == form_data.username)).first()
+        user = await crud.get_user_by_username(db=session, username=form_data.username)
 
     if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="邮箱/用户名或密码不正确",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="邮箱/用户名或密码不正确")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已被禁用，请联系管理员")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已被禁用")
     if not user.is_verified:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱未验证，请先验证您的邮箱")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱未验证")
 
-    token_data_payload = {"sub_id": user.id}
-    access_token = create_access_token(data=token_data_payload)
-    refresh_token = create_refresh_token(data=token_data_payload)
-    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
+    return Token(
+        access_token=create_access_token({"sub_id": user.id}),
+        refresh_token=create_refresh_token({"sub_id": user.id}),
+        token_type="bearer"
+    )
 
 
 @app.post("/auth/refresh-token", response_model=Token, tags=AUTH_TAGS)
-async def refresh_access_token(
-        refresh_request: RefreshTokenRequest,
-        session: Session = Depends(get_session)
-):
-    refresh_token_str = refresh_request.refresh_token
-    token_data = verify_refresh_token_and_get_token_data(refresh_token_str)
-    if not token_data or token_data.user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效或已过期的刷新令牌",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = session.get(User, token_data.user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="与此刷新令牌关联的用户不存在")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用")
+async def refresh_access_token(refresh_request: RefreshTokenRequest,
+                               session: AsyncSession = Depends(get_async_session)):
+    token_data = verify_refresh_token_and_get_token_data(refresh_request.refresh_token)
+    if not token_data or not token_data.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效或已过期的刷新令牌")
 
-    new_access_token_payload = {"sub_id": user.id}
-    new_access_token = create_access_token(data=new_access_token_payload)
-    return Token(access_token=new_access_token, refresh_token=refresh_token_str, token_type="bearer")
+    user = await crud.get_user_by_id(db=session, user_id=token_data.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在或已被禁用")
+
+    return Token(
+        access_token=create_access_token({"sub_id": user.id}),
+        refresh_token=refresh_request.refresh_token,
+        token_type="bearer"
+    )
 
 
 @app.post("/auth/request-password-reset", status_code=status.HTTP_200_OK, tags=AUTH_TAGS)
-async def request_password_reset(
-        reset_request: PasswordResetRequest,
-        background_tasks: BackgroundTasks,
-        session: Session = Depends(get_session)
-):
-    user = session.exec(select(User).where(User.email == reset_request.email)).first()
-    if user:  # 只在用户存在时发送邮件
+async def request_password_reset(reset_request: PasswordResetRequest, background_tasks: BackgroundTasks,
+                                 session: AsyncSession = Depends(get_async_session)):
+    user = await crud.get_user_by_email(db=session, email=reset_request.email)
+    if user:
         try:
-            raw_reset_token = generate_password_reset_token(user.email)
-            token_hash_for_db = get_password_hash(raw_reset_token)
-            expires_delta = datetime.timedelta(seconds=settings.PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS)
-            token_expires_at = datetime.datetime.now(datetime.timezone.utc) + expires_delta
-
-            # 删除该用户已有的密码重置令牌
-            existing_tokens = session.exec(
-                select(PasswordResetToken).where(PasswordResetToken.user_id == user.id)).all()
-            for t in existing_tokens:
-                session.delete(t)
-
-            password_reset_token_db = PasswordResetToken(
+            raw_token = generate_password_reset_token(user.email)
+            await crud.create_password_reset_token(
+                db=session,
                 user_id=user.id,
-                token_hash=token_hash_for_db,
-                expires_at=token_expires_at
+                token_hash=get_password_hash(raw_token),
+                expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+                    seconds=settings.PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS)
             )
-            session.add(password_reset_token_db)
-            session.commit()
-
-            background_tasks.add_task(
-                send_password_reset_email,
-                email_to=user.email,
-                username=user.username,
-                token=raw_reset_token
-            )
+            background_tasks.add_task(send_password_reset_email, email_to=user.email, username=user.username,
+                                      token=raw_token)
         except Exception as e:
-            print(f"为用户 {reset_request.email} 请求密码重置时发生内部错误: {e}")
-            pass
+            logger.error(f"为用户 {reset_request.email} 请求密码重置时发生内部错误: {e}")
+
     return {"message": "如果您的邮箱地址在我们系统中注册过，您将会收到一封包含密码重置说明的邮件。"}
 
 
+
 @app.post("/auth/reset-password", status_code=status.HTTP_200_OK, tags=AUTH_TAGS)
-async def reset_password(
-        password_reset_form: PasswordResetForm,
-        session: Session = Depends(get_session)
-):
-    email_from_token = verify_password_reset_token(password_reset_form.token)
-    if not email_from_token:
+async def reset_password(form: PasswordResetForm, session: AsyncSession = Depends(get_async_session)):
+    email = verify_password_reset_token(form.token)
+    if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无效或已过期的密码重置令牌")
 
-    user = session.exec(select(User).where(User.email == email_from_token)).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="与此令牌关联的用户未找到")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户账户已被禁用，无法重置密码")
+    user = await crud.get_user_by_email(db=session, email=email)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户不存在或已被禁用")
 
-    new_hashed_password = get_password_hash(password_reset_form.new_password)
-    user.hashed_password = new_hashed_password
-    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
-    session.add(user)
+    db_token = await crud.get_password_reset_token_by_hash(db=session, token_hash=get_password_hash(form.token))
+    if not db_token or db_token.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="密码重置令牌无效或已被使用")
 
-    token_hash_to_lookup = get_password_hash(password_reset_form.token)
-    db_token_record = session.exec(
-        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash_to_lookup)
-    ).first()
+    await crud.update_user_password(db=session, user=user, new_password=form.new_password)
+    await crud.delete_db_token(db=session, token=db_token)
 
-    if db_token_record:
-        if db_token_record.user_id == user.id:
-            session.delete(db_token_record)
-        else:
-            session.rollback()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="密码重置令牌与用户不匹配，操作失败")
-    else:
-        # 如果令牌本身有效，但DB中无记录，可能已被使用。出于安全，通常应报错。
-        session.rollback()  # 回滚对 user 对象的任何未提交更改（如密码更新）
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="密码重置令牌记录未找到或可能已被使用。请重新请求密码重置。"
-        )
+    return {"message": "密码已成功重置。"}
 
-    try:
-        session.commit()
-        # session.refresh(user) # refresh user 不是必须的，因为我们只返回消息
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"更新密码或提交事务时发生内部错误: {e}"  # 细化错误信息
-        )
-    return {"message": "密码已成功重置，您现在可以使用新密码登录。"}
+
 
 # --- 用户信息管理端点 ---
 USERS_TAGS = ["Users"]
@@ -356,43 +265,24 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 
 
 @app.patch("/users/me", response_model=UserRead, tags=USERS_TAGS)
-async def update_user_me(
-        user_update_data: UserUpdate,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)
-):
-    update_data = user_update_data.model_dump(exclude_unset=True)
-    if not update_data:
+async def update_user_me(user_update: UserUpdate, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    if not user_update.model_dump(exclude_unset=True):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有提供需要更新的数据")
+    if user_update.mc_name and user_update.mc_name != current_user.mc_name:
+        existing_user = await crud.get_user_by_mc_name(db=session, mc_name=user_update.mc_name)
+        if existing_user and existing_user.id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该 Minecraft 用户名已被其他用户关联")
 
-    updated_something = False
-    for key, value in update_data.items():
-        if hasattr(current_user, key):
-            setattr(current_user, key, value)
-            updated_something = True
 
-    if updated_something:
-        current_user.updated_at = datetime.datetime.now(datetime.timezone.utc)
-        session.add(current_user)
-        session.commit()
-        session.refresh(current_user)
-    return current_user
+    return await crud.update_user(db=session, user=current_user, user_update=user_update)
+
 
 
 @app.post("/users/me/change-password", status_code=status.HTTP_200_OK, tags=USERS_TAGS)
-async def change_current_user_password(
-        password_update_data: UserPasswordUpdate,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)
-):
-    if not verify_password(password_update_data.current_password, current_user.hashed_password):
+async def change_current_user_password(password_update: UserPasswordUpdate, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    if not verify_password(password_update.current_password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码不正确")
-
-    new_hashed_password = get_password_hash(password_update_data.new_password)
-    current_user.hashed_password = new_hashed_password
-    current_user.updated_at = datetime.datetime.now(datetime.timezone.utc)
-    session.add(current_user)
-    session.commit()
+    await crud.update_user_password(db=session, user=current_user, new_password=password_update.new_password)
     return {"message": "密码已成功更新"}
 
 
@@ -409,23 +299,23 @@ def create_thumbnail(
         img = PILImage.open(original_image_path)
         img.thumbnail(size, Resampling.LANCZOS)
         img.save(thumbnail_save_path)
-        print(f"缩略图已保存到: {thumbnail_save_path}")
+        logger.info(f"缩略图已保存到: {thumbnail_save_path}")
         return True
     except Exception as e:
-        print(f"创建缩略图失败: {e}")
+        logger.error(f"创建缩略图失败: {e}")
         return False
 
 
 @app.post("/gallery/upload", response_model=GalleryItemReadWithBuilder, status_code=status.HTTP_201_CREATED, tags=GALLERY_TAGS)
 async def upload_gallery_item(
         title: str = File(...),
-        builder_name: str = File(...), # 新增：接收建筑者/创作者名称
+        builder_name: str = File(...),
         description: Optional[str] = File(None),
         image: UploadFile = File(...),
-        session: Session = Depends(get_session),
+        session: AsyncSession = Depends(get_async_session),
         current_user: User = Depends(get_current_active_user)
 ):
-
+    # 步骤 1: 文件验证 (来自原始代码)
     allowed_mime_types = ["image/jpeg", "image/png", "image/gif"]
     if image.content_type not in allowed_mime_types:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"不支持的文件类型: {image.content_type}.")
@@ -435,10 +325,11 @@ async def upload_gallery_item(
     if image.size > max_file_size_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"文件过大，最大允许 {MAX_FILE_SIZE_MB}MB.")
 
+    # 步骤 2: 生成唯一文件名 (来自原始代码)
     file_extension = Path(image.filename).suffix.lower()
     if not file_extension in [".jpg", ".jpeg", ".png", ".gif"]:
         mime_to_ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif"}
-        file_extension = mime_to_ext.get(image.content_type, ".jpg")  # 默认 .jpg
+        file_extension = mime_to_ext.get(image.content_type, ".jpg")
 
     unique_filename_base = str(uuid.uuid4())
     original_filename = f"{unique_filename_base}{file_extension}"
@@ -447,44 +338,41 @@ async def upload_gallery_item(
     original_file_location = UPLOAD_DIR / original_filename
     thumbnail_file_location = UPLOAD_DIR / thumbnail_filename
 
-    # --- 新增：Get-or-Create 成员逻辑 ---
-    member = session.exec(select(Member).where(func.lower(Member.name) == func.lower(builder_name))).first()
-    if not member:
-        # 如果成员不存在，则创建一个新的
-        member = Member(name=builder_name)
-        session.add(member)
-        session.commit()
-        session.refresh(member)
+    # 步骤 3: 从数据库获取或创建成员 (调用 CRUD)
+    member = await crud.get_or_create_member(db=session, name=builder_name)
 
+    # 步骤 4: 保存上传的原始文件到本地 (来自原始代码)
     try:
         with open(original_file_location, "wb+") as file_object:
             shutil.copyfileobj(image.file, file_object)
     except Exception as e:
-        print(f"保存文件失败: {e}")
+        logger.error(f"保存文件失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上传文件时发生服务器内部错误。")
     finally:
         image.file.close()
 
+    # 步骤 5: 创建缩略图 (来自原始代码)
     thumbnail_url_to_store = None
     if create_thumbnail(original_file_location, thumbnail_file_location):
         thumbnail_url_to_store = f"/uploads/{thumbnail_filename}"
 
     image_url_to_store = f"/uploads/{original_filename}"
 
-    gallery_item_create_data = GalleryItemCreate(
+    # 步骤 6: 准备数据并通过 CRUD 函数写入数据库
+    item_create_data = GalleryItemCreate(
         title=title,
         description=description,
         image_url=image_url_to_store,
         thumbnail_url=thumbnail_url_to_store
     )
-    db_gallery_item = GalleryItem.model_validate(gallery_item_create_data, update={"user_id": current_user.id})
-    # db_gallery_item = GalleryItem(
-    #     **gallery_item_create_data.model_dump(),
-    #     user_id=current_user.id,
-    # )
-    session.add(db_gallery_item)
-    session.commit()
-    session.refresh(db_gallery_item)
+
+    db_gallery_item = await crud.create_gallery_item(
+        db=session,
+        item_create=item_create_data,
+        user_id=current_user.id,
+        member_id=member.id
+    )
+
     return db_gallery_item
 
 
@@ -497,44 +385,11 @@ class PaginatedGalleryItems(SQLModel):
 
 
 @app.get("/gallery/items", response_model=PaginatedGalleryItems, tags=GALLERY_TAGS)
-async def get_gallery_items(
-        session: AsyncSession = Depends(get_async_session),  # 假设您现在是同步操作，如果是异步，应该是 AsyncSession 和 get_async_session
-        page: int = Query(1, ge=1, description="页码，从1开始"),
-        page_size: int = Query(10, ge=1, le=100, description="每页项目数量")
-):
-    offset = (page - 1) * page_size
-
-    total_items_statement = select(func.count(GalleryItem.id))
-
-    # session.exec() 返回一个 Result 对象。对于 count() 这样的聚合函数，
-    # 我们期望得到一个标量值。
-    total_items = (await session.exec(total_items_statement)).one_or_none()
-
-
-    total_items = total_items if total_items is not None else 0
-
-    if total_items == 0:
-        return PaginatedGalleryItems(total_items=0, total_pages=0, page=page, page_size=page_size, items=[])
-
-    statement = (
-        select(GalleryItem)
-        .order_by(GalleryItem.uploaded_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
-    # session.exec() 返回 Result 对象，然后我们可以用 .all() 获取所有 ORM 实例
-    results_for_items =  await session.exec(statement)
-    gallery_items_db = results_for_items.all()
-
+async def get_gallery_items(session: AsyncSession = Depends(get_async_session), page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
+    total_items, items = await crud.get_paginated_gallery_items(db=session, page=page, page_size=page_size)
     total_pages = (total_items + page_size - 1) // page_size
+    return PaginatedGalleryItems(total_items=total_items, total_pages=total_pages, page=page, page_size=page_size, items=items)
 
-    return PaginatedGalleryItems(
-        total_items=total_items,
-        total_pages=total_pages,
-        page=page,
-        page_size=page_size,
-        items=gallery_items_db
-    )
 
 
 # --- 新增：画廊项目管理端点 (更新和删除) ---
@@ -546,46 +401,24 @@ class GalleryItemUpdate(SQLModel):
 
 
 @app.patch("/gallery/items/{item_id}", response_model=GalleryItemReadWithBuilder, tags=GALLERY_TAGS)
-async def update_gallery_item(
-        item_id: int,
-        item_update: GalleryItemUpdate,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)
-):
-    db_item = session.get(GalleryItem, item_id)
+async def update_gallery_item(item_id: int, item_update: GalleryItemUpdate, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    db_item = await crud.get_gallery_item_by_id(db=session, item_id=item_id)
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目未找到")
-
-    # 权限检查：只有上传者才能修改 (未来可以扩展为管理员)
     if db_item.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权修改此项目")
+    return await crud.update_gallery_item(db=session, item=db_item, item_update=item_update)
 
-    update_data = item_update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_item, key, value)
-
-    db_item.updated_at = datetime.datetime.now(datetime.timezone.utc)
-    session.add(db_item)
-    session.commit()
-    session.refresh(db_item)
-    return db_item
 
 
 @app.delete("/gallery/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, tags=GALLERY_TAGS)
-async def delete_gallery_item(
-        item_id: int,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)
-):
-    db_item = session.get(GalleryItem, item_id)
+async def delete_gallery_item(item_id: int, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    db_item = await crud.get_gallery_item_by_id(db=session, item_id=item_id)
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目未找到")
-
     if db_item.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除此项目")
-
-    session.delete(db_item)
-    session.commit()
+    await crud.delete_gallery_item(db=session, item=db_item)
     return
 
 
@@ -594,68 +427,49 @@ MEMBERS_TAGS = ["Members"]
 
 
 @app.post("/members", response_model=MemberRead, tags=MEMBERS_TAGS, status_code=status.HTTP_201_CREATED)
-async def create_member(
-        member_data: MemberCreate,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)  # 保护端点
-):
-    # 检查名称是否已存在
-    existing_member = session.exec(select(Member).where(Member.name == member_data.name)).first()
-    if existing_member:
+async def create_member(member_data: MemberCreate, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    if await crud.get_member_by_name(db=session, name=member_data.name):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该名称的成员已存在")
-
+    # In a real app, you might want to move model_validate into the crud function
     db_member = Member.model_validate(member_data)
     session.add(db_member)
-    session.commit()
-    session.refresh(db_member)
+    await session.commit()
+    await session.refresh(db_member)
     return db_member
 
 
 @app.get("/members", response_model=List[MemberRead], tags=MEMBERS_TAGS)
-async def get_all_members(session: Session = Depends(get_session)):
-    members = session.exec(select(Member)).all()
-    return members
+async def get_all_members(session: AsyncSession = Depends(get_async_session)):
+    return await crud.get_all_members(db=session)
 
 
 @app.patch("/members/{member_id}", response_model=MemberRead, tags=MEMBERS_TAGS)
-async def update_member(
-        member_id: int,
-        member_update: MemberUpdate,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)  # 保护端点
-):
-    db_member = session.get(Member, member_id)
+async def update_member(member_id: int, member_update: MemberUpdate, session: AsyncSession = Depends(get_async_session), current_user: User = Depends(get_current_active_user)):
+    db_member = await crud.get_member_by_id(db=session, member_id=member_id)
     if not db_member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
+    return await crud.update_member(db=session, member=db_member, member_update=member_update)
 
-    update_data = member_update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_member, key, value)
-
-    session.add(db_member)
-    session.commit()
-    session.refresh(db_member)
-    return db_member
 
 
 @app.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, tags=MEMBERS_TAGS)
 async def delete_member(
         member_id: int,
-        session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_active_user)  # 保护端点
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user)
 ):
-    db_member = session.get(Member, member_id)
+    db_member = await crud.get_member_by_id(db=session, member_id=member_id)
     if not db_member:
+        # 细节：即使是管理员，也应该告诉他资源不存在
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
-    session.delete(db_member)
-    session.commit()
-    return
 
+    await crud.delete_member(db=session, member=db_member)
+    return
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---
 if __name__ == "__main__":
-    print(f"启动 Uvicorn 开发服务器，API 地址: http://127.0.0.1:8000")
-    print(f"允许的前端源 (CORS): {allow_origins_list}")  # 使用已定义的 allow_origins_list
+    logger.info(f"启动 Uvicorn 开发服务器，API 地址: http://127.0.0.1:8000")
+    logger.info(f"允许的前端源 (CORS): {allow_origins_list}")  # 使用已定义的 allow_origins_list
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

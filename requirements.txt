@@ -8,3 +8,4 @@ pillow~=11.2.1
 passlib~=1.7.4
 itsdangerous~=2.2.0
 python-jose~=3.5.0
+alembic~=1.16.1

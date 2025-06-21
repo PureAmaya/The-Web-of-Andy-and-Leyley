@@ -1,4 +1,6 @@
 ﻿# backend/models.py
+import enum
+
 from sqlmodel import Field, SQLModel, Relationship
 from typing import Optional, Any, List
 import datetime
@@ -9,17 +11,28 @@ from sqlalchemy import UniqueConstraint  # 导入 UniqueConstraint
 
 # --- 用户模型 ---
 
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
+
 class UserBase(SQLModel):
     """
     用户模型的基础字段，用于数据校验和共享。
     """
     username: str = Field(description="用户名")
     email: str = Field(description="邮箱")
-    full_name: Optional[str] = Field(default=None, description="全名")
     bio: Optional[str] = Field(default=None, description="个人简介")
     avatar_url: Optional[str] = Field(default=None, description="头像图片链接 (必须是有效的URL或None)")
     is_active: bool = Field(default=True, description="账户是否激活")
     is_verified: bool = Field(default=False, description="邮箱是否已验证")
+    role: UserRole = Field(default=UserRole.USER, description="用户角色")
+    mc_name: Optional[str] = Field(
+        default=None,
+        description="Minecraft 正版用户名",
+        index=True,
+        unique=True,
+        sa_column_kwargs={"nullable": True}  # 确保数据库列可以为NULL
+    )
 
 
 class User(UserBase, table=True):
@@ -63,18 +76,25 @@ class UserRead(UserBase):
     id: int
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    is_active: bool # 确保 UserRead 也包含这些从 UserBase 继承的字段
+    is_active: bool
     is_verified: bool
+
+    # --- 新增：动态生成 MC 头像 URL ---
+    @property
+    def mc_avatar_url(self) -> Optional[str]:
+        if self.mc_name:
+            # 我们使用 cravatar.eu 服务，它稳定且支持通过用户名获取头像
+            return f"https://cravatar.eu/avatar/{self.mc_name}/128.png"
+        return None
 
 
 class UserUpdate(SQLModel):
     """
     用于更新用户个人资料时接收的请求体模型。
-    所有字段都是可选的。
     """
-    full_name: Optional[str] = Field(default=None, description="新的全名")
     bio: Optional[str] = Field(default=None, description="新的个人简介")
-    avatar_url: Optional[str] = Field(default=None, description="新的头像图片链接 (必须是有效的URL或None)")
+    avatar_url: Optional[str] = Field(default=None, description="新的头像图片链接")
+    mc_name: Optional[str] = Field(default=None, description="新的 Minecraft 用户名") # <--- 新增
 
 
 class UserPasswordUpdate(SQLModel):
@@ -249,6 +269,14 @@ class MemberCreate(MemberBase):
 
 class MemberRead(MemberBase):
     id: int
+
+    # --- 新增：为成员动态生成 MC 头像 URL ---
+    # 假设 Member 的 name 字段就是其 Minecraft 用户名
+    @property
+    def mc_avatar_url(self) -> Optional[str]:
+        if self.name:
+            return f"https://cravatar.eu/avatar/{self.name}/128.png"
+        return None
 
 
 class MemberUpdate(SQLModel):
