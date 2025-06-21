@@ -1,76 +1,58 @@
-﻿// src/stores/settings.js
-import {defineStore} from 'pinia';
-import {ref, watch, onMounted} from 'vue'; // 导入 onMounted
-
-const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+﻿import { defineStore } from 'pinia';
+import { ref } from 'vue';
 
 // 定义两套颜色主题的变量值
-const lightThemeColors = { // "安迪和莉莉的棺材" 风格的日间模式
-    '--main-bg-color': '#e8e3d9',        // 米白色/亚麻色背景 (取代之前的 #f0f0f0)
-    '--secondary-bg-color': '#d1ccc0',   // 稍深一点的米色/浅褐色背景 (取代之前的 #ffffff)
-    '--main-text-color': '#4a3f35',      // 深棕色/暗褐色文字 (取代之前的 #2c3e50)
-    '--border-color': '#a8a092',         // 较深的米色/灰褐色边框 (取代之前的 #dcdcdc)
-    '--link-color': '#6e5f50',           // 暗哑的棕色链接 (取代之前的 #3498db)
-    '--link-hover-color': '#8a7a6a',     // 链接悬停时稍亮一些 (取代之前的 #2980b9)
-    '--primary-accent-color': '#8c4343', // 更加不饱和/暗沉的红色作为强调色 (取代之前的 #e74c3c)
-    // 您可以根据需要为日间模式定义或调整更多变量
-    // 例如，按钮的特定背景色、文字颜色等，如果它们与暗色模式下有显著不同的话
+const lightThemeColors = { // 复古/羊皮纸风格
+    '--main-bg-color': '#f4f1e9',        // 灰白色/米色背景
+    '--secondary-bg-color': '#e8e3d9',   // 稍深的米色
+    '--main-text-color': '#3d352e',      // 深褐色文字
+    '--border-color': '#c5bbae',         // 灰褐色边框
+    '--link-color': '#5a4f45',           // 暗哑的棕色链接
+    '--link-hover-color': '#8c4343',     // 链接悬停时使用强调色
+    '--primary-accent-color': '#8c4343', // 不饱和的暗红色作为强调色
+    '--button-text-color': '#f4f1e9',    // 按钮文字用浅色
 };
 
 const darkThemeColors = {
-    '--main-bg-color': '#1a1a1a',          // 深灰背景
-    '--secondary-bg-color': '#2b2b2b',   // 稍亮的灰色
-    '--main-text-color': '#e0e0e0',       // 浅灰色文字
-    '--border-color': '#444',            // 边框颜色
-    '--link-color': '#c0c0c0',           // 链接颜色
-    '--link-hover-color': '#ffffff',     // 链接悬停 - 白色
-    '--primary-accent-color': '#9e1c1c', // 核心点缀色 - 暗红色
-
-    '--font-main': '"Kalam", "Noto Sans SC", sans-serif',
-    '--font-special': '"Special Elite", "Noto Sans SC", cursive',
+    '--main-bg-color': '#121212',          // 非常深的木炭色背景
+    '--secondary-bg-color': '#1E1E1E',   // 稍亮的深灰色
+    '--main-text-color': '#E0E0E0',       // 柔和的白色文字，避免刺眼
+    '--border-color': '#333333',         // 更清晰的边框颜色
+    '--link-color': '#BBBBBB',           // 链接颜色，比正文亮
+    '--link-hover-color': '#FFFFFF',     // 链接悬停 - 纯白
+    '--primary-accent-color': '#B71C1C', // 保持一个深邃的红色作为强调色 (例如，Material Design的深红色)
+    '--button-text-color': '#FFFFFF',
 };
 
-// ... (useSettingsStore 的其余部分保持不变) ...
+
 export const useSettingsStore = defineStore('settings', () => {
-    // ... (API URL State 和 Theme State 不变) ...
-    const apiBaseUrl = ref(localStorage.getItem('api_base_url') || DEFAULT_API_BASE_URL);
+    // --- State ---
+    // 使用 import.meta.env 读取环境变量，并提供一个备用值
+    const apiBaseUrl = ref(import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
+
+    const contactInfo = ref({}); // 联系信息
+    const beian = ref({}); // 备案信息
+
     const availableThemes = ['light', 'dark', 'system'];
     const theme = ref(localStorage.getItem('theme_preference') || 'system');
-    const currentAppliedTheme = ref('light'); // 初始值会被 initializeTheme 覆盖
+    const currentAppliedTheme = ref('light');
 
-    // ... (API URL Actions 不变) ...
-    function setApiBaseUrl(newUrl) {
-        if (newUrl && typeof newUrl === 'string' && newUrl.trim() !== '') {
-            const sanitizedUrl = newUrl.trim().replace(/\/+$/, '');
-            apiBaseUrl.value = sanitizedUrl;
-        } else {
-            apiBaseUrl.value = DEFAULT_API_BASE_URL;
-        }
-    }
+    // --- Actions ---
 
-    watch(apiBaseUrl, (newUrlValue) => {
-        localStorage.setItem('api_base_url', newUrlValue);
-    });
-
-    // --- Theme Actions (这里的逻辑保持不变，它会根据传入的主题名称选择对应的颜色对象) ---
     function applyThemeVariables(themeToApply) {
         const root = document.documentElement;
-        // 根据 themeToApply 选择正确的颜色集
+        // 这里的逻辑会自动使用我们上面定义的新颜色对象
         const colors = themeToApply === 'dark' ? darkThemeColors : lightThemeColors;
         for (const [variable, value] of Object.entries(colors)) {
             root.style.setProperty(variable, value);
         }
         currentAppliedTheme.value = themeToApply;
-        root.className = `theme-${themeToApply}`; // 确保类名也正确设置
-        console.log(`Theme applied: ${themeToApply}`);
+        root.className = `theme-${themeToApply}`;
     }
 
     function determineEffectiveTheme() {
         if (theme.value === 'system') {
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                return 'dark';
-            }
-            return 'light';
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
         return theme.value;
     }
@@ -84,8 +66,7 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     function initializeTheme() {
-        const effectiveTheme = determineEffectiveTheme();
-        applyThemeVariables(effectiveTheme);
+        applyThemeVariables(determineEffectiveTheme());
         if (window.matchMedia) {
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
                 if (theme.value === 'system') {
@@ -95,14 +76,36 @@ export const useSettingsStore = defineStore('settings', () => {
         }
     }
 
+    // 初始化函数，用于应用启动时加载配置
+    async function initialize() {
+        try {
+            const response = await fetch('/site-config.json'); // 从public目录加载配置文件
+            if (!response.ok) throw new Error("Config not found");
+            const config = await response.json();
+
+            // 注意这里的逻辑：环境变量提供了初始值，但 site-config.json 中的值可以覆盖它
+            // 这提供了双重灵活性
+            apiBaseUrl.value = config.apiBaseUrl || apiBaseUrl.value;
+            contactInfo.value = config.contactInfo || {};
+            beian.value = config.beian || {};
+
+        } catch (error) {
+            console.error('无法加载站点配置 (site-config.json):', error);
+            console.info('将使用默认配置。');
+        }
+
+        // 加载完配置后，初始化主题
+        initializeTheme();
+    }
+
     return {
         apiBaseUrl,
-        setApiBaseUrl,
-        DEFAULT_API_BASE_URL,
+        contactInfo,
+        beian,
         theme,
         currentAppliedTheme,
         availableThemes,
+        initialize, // 导出初始化函数
         setTheme,
-        initializeTheme,
     };
 });

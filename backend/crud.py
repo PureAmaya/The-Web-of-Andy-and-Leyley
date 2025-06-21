@@ -192,6 +192,10 @@ async def get_paginated_gallery_items(db: AsyncSession, page: int, page_size: in
     # 获取分页数据
     items_statement = (
         select(models.GalleryItem)
+        .options(
+            selectinload(models.GalleryItem.builder),  # 预先加载 builder
+            selectinload(models.GalleryItem.uploader)  # 预先加载 uploader
+        )
         .order_by(models.GalleryItem.uploaded_at.desc())
         .offset(offset)
         .limit(page_size)
@@ -232,3 +236,9 @@ async def delete_gallery_item(db: AsyncSession, item: models.GalleryItem):
     """删除画廊作品"""
     await db.delete(item)
     await db.commit()
+
+
+async def get_friend_links(db: AsyncSession) -> list[models.FriendLink]:
+    """获取所有友情链接，按显示顺序排序"""
+    result = await db.execute(select(models.FriendLink).order_by(models.FriendLink.display_order))
+    return result.scalars().all()

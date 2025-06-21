@@ -15,6 +15,10 @@
             </RouterLink>
             <button @click="handleLogout" class="nav-button logout-button">离去</button>
           </template>
+          <template v-else>
+            <RouterLink to="/login" class="nav-link">登录</RouterLink>
+            <RouterLink to="/register" class="nav-link">注册</RouterLink>
+          </template>
         </nav>
 
         <div class="theme-switcher">
@@ -32,12 +36,7 @@
       <RouterView/>
     </main>
 
-    <footer class="app-footer">
-      <div class="footer-content">
-        <p>&copy; {{ new Date().getFullYear() }} L&A. All rights reserved.</p>
-
-      </div>
-    </footer>
+    <TheFooter />
   </div>
 </template>
 
@@ -46,12 +45,12 @@ import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
+import TheFooter from '@/components/TheFooter.vue'; // 导入页脚组件
 
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
 
-// --- API 设置相关的 ref 和函数已被删除 ---
 const selectedTheme = ref(settingsStore.theme);
 
 watch(() => settingsStore.theme, (newThemePreference) => {
@@ -60,16 +59,21 @@ watch(() => settingsStore.theme, (newThemePreference) => {
     }
 });
 
+// onMounted 钩子负责初始化整个应用
 onMounted(async () => {
+  // 1. 初始化所有配置和主题
+  await settingsStore.initialize();
+  selectedTheme.value = settingsStore.theme;
+
+  // 2. 检查认证状态并获取用户信息
   if (authStore.accessToken && !authStore.user) {
     await authStore.fetchAndSetUser();
   }
-  settingsStore.initializeTheme();
-  selectedTheme.value = settingsStore.theme;
 });
 
 function handleLogout() {
   authStore.logout();
+  router.push('/login'); // 登出后跳转到登录页
 }
 
 function onThemeChange() {
@@ -78,44 +82,6 @@ function onThemeChange() {
 </script>
 
 <style scoped>
-/* 将噪点效果的样式添加到 App.vue 的 <style> 块中 */
-@keyframes noiseAnimation {
-  0% { transform: translate(0,0); }
-  10% { transform: translate(-5%,-5%); }
-  20% { transform: translate(-10%,5%); }
-  30% { transform: translate(5%,-10%); }
-  40% { transform: translate(-5%,15%); }
-  50% { transform: translate(-10%,-5%); }
-  60% { transform: translate(15%,0); }
-  70% { transform: translate(0,10%); }
-  80% { transform: translate(-15%,0); }
-  90% { transform: translate(10%,5%); }
-  100% { transform: translate(5%,0); }
-}
-
-.noise-overlay {
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  z-index: 1001; /* 确保在最顶层 */
-  pointer-events: none; /* 让鼠标可以点击下层元素 */
-  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4d5eXlzc3OLi4ubm5uVlZWPj4+NjY19fX2JiYl/f39tbW1paWhzc3NwcDBvCustomizeable Preview...b29sbm5uZmZmamZn/iDYGAAAAR0lEQVR42qzAQAMAwUAwA2KO/p9v+wpr3RA6QJLh7AENLmMQ+xHyL9uG6w0cBF93W/2wA3h2jgHWfPDeBvFenqgIA695gAAAAAElFTkSuQmCC');
-  opacity: 0.08;
-  animation: noiseAnimation .2s infinite;
-}
-
-
-.main-nav {
-  display: flex;
-  align-items: center;
-  gap: 8px; /* 可以调整链接间距 */
-  margin-right: auto;
-  flex-wrap: wrap; /* 允许导航在空间不足时换行 */
-}
-
-/* 其他样式 ... */
 #app-layout {
   display: flex;
   flex-direction: column;
@@ -128,6 +94,9 @@ function onThemeChange() {
   color: var(--main-text-color);
   padding: 0.8rem 1rem;
   border-bottom: 1px solid var(--border-color);
+  position: sticky; /* 使头部在滚动时固定在顶部 */
+  top: 0;
+  z-index: 999;
 }
 
 .header-content {
@@ -146,22 +115,29 @@ function onThemeChange() {
   font-weight: normal;
 }
 
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* 可以调整链接间距 */
+  margin-left: 20px; /* Logo和导航间的距离 */
+  margin-right: auto; /* 关键：将导航推到左边，将右侧内容推到右边 */
+  flex-wrap: wrap; /* 允许导航在空间不足时换行 */
+}
+
 .nav-link {
   color: var(--link-color);
   text-decoration: none;
   padding: 0.5rem 0.8rem;
-  border-radius: 0;
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background-color 0.2s, color 0.2s;
   font-size: 0.9rem;
   border: 1px solid transparent;
-  white-space: nowrap; /* 防止链接文字换行 */
+  white-space: nowrap;
 }
 
 .nav-link:hover,
 .nav-link.router-link-exact-active {
   background-color: var(--border-color);
   color: var(--link-hover-color);
-  border-color: var(--primary-accent-color);
 }
 
 .nav-button.logout-button {
@@ -169,16 +145,17 @@ function onThemeChange() {
   color: var(--link-color);
   border: 1px solid var(--border-color);
   padding: 0.5rem 0.8rem;
-  border-radius: 0;
   cursor: pointer;
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
   font-size: 0.9rem;
   white-space: nowrap;
+  font-family: inherit;
+  text-transform: uppercase;
 }
 
 .nav-button.logout-button:hover {
   background-color: var(--primary-accent-color);
-  color: var(--main-text-color);
+  color: var(--button-text-color);
   border-color: var(--primary-accent-color);
 }
 
@@ -186,18 +163,6 @@ function onThemeChange() {
   margin-left: 20px;
   display: flex;
   align-items: center;
-}
-
-.theme-switcher label.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
 }
 
 .theme-switcher select {
@@ -211,98 +176,12 @@ function onThemeChange() {
   outline-color: var(--primary-accent-color);
 }
 
-.theme-switcher select:focus {
-  border-color: var(--primary-accent-color);
-}
-
 .app-content {
-  flex-grow: 1;
+  flex-grow: 1; /* 让主要内容区域占据剩余的所有空间 */
   padding: 20px;
-}
-
-.app-footer {
-  background-color: var(--secondary-bg-color);
-  color: #888;
-  text-align: center;
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--border-color);
-  margin-top: auto;
-  font-size: 0.8rem;
-}
-
-.footer-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1rem;
-}
-
-.api-config-section {
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.api-url-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.api-config-section label {
-  font-size: 0.9em;
-  color: var(--link-color);
-}
-
-.api-button.save-button {
-  background-color: #1a6e1a;
-}
-
-.api-button.save-button:hover:not(:disabled) {
-  background-color: #124e12;
-}
-
-.api-button.reset-button {
-  background-color: #b8860b;
-  color: var(--main-text-color);
-}
-
-.api-button.reset-button:hover:not(:disabled) {
-  background-color: #8b6508;
-}
-
-.api-button.test-button {
-  background-color: #0056b3;
-}
-
-.api-button.test-button:hover:not(:disabled) {
-  background-color: #003f80;
-}
-
-.connection-status {
-  font-size: 0.85em;
-  margin-top: 5px;
-  padding: 5px 10px;
-  border-radius: 0;
-  text-align: center;
-  min-height: 1.5em;
-  border: 1px solid transparent;
-}
-
-.connection-status.success {
-  color: #a3d9b1;
-  background-color: rgba(40, 167, 69, 0.2);
-  border-color: #28a745;
-}
-
-.connection-status.error {
-  color: #f8d7da;
-  background-color: rgba(220, 53, 69, 0.2);
-  border-color: #dc3545;
+  width: 100%;
+  max-width: 1200px; /* 限制内容最大宽度 */
+  margin: 0 auto; /* 水平居中 */
+  box-sizing: border-box;
 }
 </style>

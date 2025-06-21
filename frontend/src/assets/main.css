@@ -1,96 +1,138 @@
-/* src/assets/main.css */
+/* Special Elite Regular */
+@font-face {
+    font-family: 'Special Elite';
+    font-style: normal;
+    font-weight: 400;
+    src: url('./fonts/special-elite-v19-latin-regular.woff2') format('woff2');
+}
+
+/* noto-sans-sc-regular - chinese-simplified */
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-style: normal;
+    font-weight: 400;
+    src: url('./fonts/noto-sans-sc-v38-chinese-simplified_latin-regular.woff2') format('woff2');
+}
+
+/* noto-sans-sc-700 - chinese-simplified */
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-style: normal;
+    font-weight: 700;
+    src: url('./fonts/noto-sans-sc-v38-chinese-simplified_latin-700.woff2') format('woff2');
+}
+
 
 :root {
-  /* ... (之前的颜色变量保持不变) ... */
-  --main-bg-color: #1a1a1a;
-  --secondary-bg-color: #2b2b2b;
-  --main-text-color: #e0e0e0;
-  --border-color: #444;
-  --link-color: #c0c0c0;
-  --link-hover-color: #ffffff;
-  --primary-accent-color: #7f0000; /* 暗红色 */
+    --font-main: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-special: "Special Elite", "Noto Sans SC", cursive;
+    --main-bg-color: #1a1a1a;
+    --secondary-bg-color: #2b2b2b;
+    --main-text-color: #e0e0e0;
+    --border-color: #444;
+    --link-color: #c0c0c0;
+    --link-hover-color: #ffffff;
+    --primary-accent-color: #7f0000; /* 暗红色 */
 
-  /* 新增：专门用于按钮的文字颜色，确保高对比度 */
-  --button-text-color: #f0f0f0; /* 非常浅的灰色或白色 */
-  --button-alt-text-color: #1a1a1a; /* 用于浅色背景按钮的深色文字 */
+    /* 新增：专门用于按钮的文字颜色，确保高对比度 */
+    --button-text-color: #f0f0f0; /* 非常浅的灰色或白色 */
+    --button-alt-text-color: #1a1a1a; /* 用于浅色背景按钮的深色文字 */
 
-  /* 新增：更具游戏感的边框和阴影 */
-  --game-border-style: 2px outset #555; /* 示例：轻微的凸出边框 */
-  --game-border-hover-style: 2px inset #333; /* 示例：悬停时内凹 */
-  --game-box-shadow: 3px 3px 0px #000; /* 示例：硬朗的像素风格阴影 */
+    /* 新增：更具游戏感的边框和阴影 */
+    --game-border-style: 2px outset #555; /* 示例：轻微的凸出边框 */
+    --game-border-hover-style: 2px inset #333; /* 示例：悬停时内凹 */
+    --game-box-shadow: 3px 3px 0px #000; /* 示例：硬朗的像素风格阴影 */
 
-  /* 字体变量保持不变 */
-  /* --font-pixel: 'Press Start 2P', cursive; */
-  --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    /* 字体变量保持不变 */
+    /* --font-pixel: 'Press Start 2P', cursive; */
+    --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* ... (body, #app, a, h1-h6, message, loading 样式可以保持之前的调整) ... */
 body {
-  background-color: var(--main-bg-color);
-  color: var(--main-text-color);
-  font-family: var(--font-main);
-  margin: 0;
-  padding: 0;
-  line-height: 1.6;
-  font-size: 16px;
+    background-color: var(--main-bg-color);
+    color: var(--main-text-color);
+    font-family: var(--font-main);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6; /* 增加行高，提升衬线字体的可读性 */
+    font-size: 16px; /* 适当增大基础字号 */
+    font-weight: 400;
+    /* 添加细微的背景纹理 */
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4d5eXlzc3OLi4ubm5uVlZWPj4+NjY19fX2JiYl/f39tbW1paWhzc3NwcDBvbnVvb2N8fHx+fn5/f3//f38fHx8fRpkgAAAAR0lEQVR42qzAQAMAwUAwA2KO/p9v+wpr3RA6QJLh7AENLmMQ+xHyL9uG6w0cBF93W/2wA3h2jgHWfPDeBvFenqgIA695gAAAAAElFTkSuQmCC');
+    background-repeat: repeat;
+    text-rendering: optimizeLegibility; /* 优化衬线字体的渲染 */
 }
 
 #app { /* 确保 #app 本身不设置可能冲突的背景色，让 App.vue 控制 */
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0; /* 移除这里的 padding，让 App.vue 的 header/main/footer 自己控制 */
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0; /* 移除这里的 padding，让 App.vue 的 header/main/footer 自己控制 */
 }
-/* ... (其他全局样式) ... */
+
+/* 调整输入框和按钮的样式以适应新风格 */
+input, textarea, button, select {
+    border-radius: 0 !important; /* 强制无圆角 */
+    box-shadow: none !important; /* 移除阴影，追求扁平复古感 */
+}
+
+button, .form-button, .api-button {
+    text-transform: none; /* 取消大写，手写风格字体小写更好看 */
+    font-family: var(--font-special); /* 按钮也使用特殊字体 */
+    border-width: 2px;
+    padding: 8px 16px;
+}
+
 
 /* 输入框、文本域样式调整 */
 input[type="text"],
 input[type="email"],
 input[type="password"],
 textarea {
-  background-color: var(--secondary-bg-color);
-  color: var(--main-text-color);
-  border: 1px solid var(--border-color); /* 默认边框 */
-  padding: 10px 12px; /* 调整padding */
-  border-radius: 0;
-  box-sizing: border-box;
-  width: 100%;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease; /* 添加过渡效果 */
+    background-color: var(--secondary-bg-color);
+    color: var(--main-text-color);
+    border: 1px solid var(--border-color); /* 默认边框 */
+    padding: 10px 12px; /* 调整padding */
+    border-radius: 0;
+    box-sizing: border-box;
+    width: 100%;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease; /* 添加过渡效果 */
 }
 
 input[type="text"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus,
 textarea:focus {
-  outline: none;
-  border-color: var(--primary-accent-color); /* 聚焦时使用强调色边框 */
-  box-shadow: 0 0 0 2px rgba(127, 0, 0, 0.4); /* 轻微的强调色外发光 */
+    outline: none;
+    border-color: var(--primary-accent-color); /* 聚焦时使用强调色边框 */
+    box-shadow: 0 0 0 2px rgba(127, 0, 0, 0.4); /* 轻微的强调色外发光 */
 }
 
 /* 按钮基础样式调整 */
 button, .form-button, .api-button {
-  padding: 10px 18px; /* 调整padding */
-  border-radius: 0;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-  font-family: var(--font-main); /* 确保按钮也使用主题字体 */
-  font-weight: bold; /* 按钮文字可以加粗一些 */
-  text-transform: uppercase; /* 文字大写，增加游戏UI感 */
-  letter-spacing: 0.5px; /* 轻微增加字间距 */
+    padding: 10px 18px; /* 调整padding */
+    border-radius: 0;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    font-family: var(--font-main); /* 确保按钮也使用主题字体 */
+    font-weight: bold; /* 按钮文字可以加粗一些 */
+    text-transform: uppercase; /* 文字大写，增加游戏UI感 */
+    letter-spacing: 0.5px; /* 轻微增加字间距 */
 
-  /* 默认按钮样式：深色背景，亮色文字 */
-  background-color: var(--secondary-bg-color);
-  border: 1px solid var(--border-color); /* 默认边框 */
-  color: var(--button-text-color); /* 使用专门的按钮文字颜色 */
-  /* box-shadow: var(--game-box-shadow); /* 尝试添加游戏风格阴影 */
+    /* 默认按钮样式：深色背景，亮色文字 */
+    background-color: var(--secondary-bg-color);
+    border: 1px solid var(--border-color); /* 默认边框 */
+    color: var(--button-text-color); /* 使用专门的按钮文字颜色 */
+    /* box-shadow: var(--game-box-shadow); /* 尝试添加游戏风格阴影 */
 }
 
 button:hover:not(:disabled),
 .form-button:hover:not(:disabled),
 .api-button:hover:not(:disabled) {
-  background-color: var(--border-color); /* 悬停时加深背景 */
-  border-color: var(--primary-accent-color); /* 悬停时强调边框 */
-  transform: translateY(-1px); /* 轻微上移 */
-  /* box-shadow: 4px 4px 0px #000; /* 悬停时阴影变化 */
+    background-color: var(--border-color); /* 悬停时加深背景 */
+    border-color: var(--primary-accent-color); /* 悬停时强调边框 */
+    transform: translateY(-1px); /* 轻微上移 */
+    /* box-shadow: 4px 4px 0px #000; /* 悬停时阴影变化 */
 }
 
 button:active:not(:disabled),
@@ -104,7 +146,7 @@ button:active:not(:disabled),
 button:disabled,
 .form-button:disabled,
 .api-button:disabled {
-  opacity: 0.5; /* 禁用时降低透明度 */
-  cursor: not-allowed;
-  /* box-shadow: none; /* 禁用时无阴影 */
+    opacity: 0.5; /* 禁用时降低透明度 */
+    cursor: not-allowed;
+    /* box-shadow: none; /* 禁用时无阴影 */
 }

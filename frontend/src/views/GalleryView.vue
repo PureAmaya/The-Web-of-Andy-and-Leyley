@@ -3,15 +3,35 @@
     <div v-if="isLoading" class="loading">正在加载画廊项目...</div>
 
     <div v-if="error" class="error-message">
-      加载画廊项目失败: {{ error.message }}
+      加载画廊项目失败: {{ error }}
     </div>
 
     <div v-if="!isLoading && !error && galleryItems.length > 0">
       <div class="gallery-grid">
-        <div v-for="item in galleryItems" :key="item.id" class="gallery-item" @click="showFullImage(item)">
-          <img :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/200x200.png?text=No+Thumb'" :alt="item.title" />
-          <h3>{{ item.title }}</h3>
-          <p v-if="item.uploader">上传者: {{ item.uploader.username }}</p>
+        <div
+          v-for="item in galleryItems"
+          :key="item.id"
+          class="gallery-item"
+          @click="showFullImage(item)"
+          @keydown.enter="showFullImage(item)"
+          tabindex="0"
+          role="button"
+          :aria-label="`查看作品 ${item.title}`"
+        >
+          <img
+            :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/400x300.png?text=Image+Not+Found'"
+            :alt="item.title"
+            class="gallery-image"
+          />
+          <div class="item-title-bar">
+            <h3 class="item-title">{{ item.title }}</h3>
+          </div>
+          <div class="item-info-overlay">
+            <h3 class="item-title-hover">{{ item.title }}</h3>
+            <p v-if="item.builder" class="item-author">
+              —— {{ item.builder.name }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -32,11 +52,35 @@
 
     <div v-if="selectedItemForLightbox" class="lightbox-overlay" @click.self="closeLightbox">
       <div class="lightbox-content">
-        <button @click="closeLightbox" class="close-button">×</button>
-        <img :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`" :alt="selectedItemForLightbox.title" />
-        <h2>{{ selectedItemForLightbox.title }}</h2>
-        <p v-if="selectedItemForLightbox.description">{{ selectedItemForLightbox.description }}</p>
-        <p v-if="selectedItemForLightbox.uploader">上传者: {{ selectedItemForLightbox.uploader.username }}</p>
+        <img
+          :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
+          :alt="selectedItemForLightbox.title"
+          class="lightbox-image"
+        />
+        <div class="lightbox-details">
+            <h2>{{ selectedItemForLightbox.title }}</h2>
+            <p v-if="selectedItemForLightbox.description" class="lightbox-description">
+              {{ selectedItemForLightbox.description }}
+            </p>
+            <div class="lightbox-meta">
+              <p v-if="selectedItemForLightbox.builder">
+                <strong>创作者:</strong> {{ selectedItemForLightbox.builder.name }}
+              </p>
+              <p v-if="selectedItemForLightbox.uploader">
+                <strong>上传者:</strong> {{ selectedItemForLightbox.uploader.username }}
+              </p>
+            </div>
+            <a
+              :href="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
+              :download="`${selectedItemForLightbox.title}.png`"
+              class="download-button"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              下载原图
+            </a>
+        </div>
+        <button @click="closeLightbox" class="close-button" aria-label="关闭">&times;</button>
       </div>
     </div>
   </div>
@@ -44,13 +88,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import apiClient from '@/api';
 import { useSettingsStore } from '@/stores/settings';
 
-const settingsStore = useSettingsStore(); // 2. 获取 settingsStore 实例
+const settingsStore = useSettingsStore();
 
 const galleryItems = ref([]);
 const currentPage = ref(1);
-const pageSize = ref(10); // 您可以根据需要调整默认值
+const pageSize = ref(12);
 const totalItems = ref(0);
 const totalPages = ref(0);
 const isLoading = ref(true);
@@ -61,21 +106,16 @@ async function fetchGalleryItems(page = 1, limit = pageSize.value) {
   isLoading.value = true;
   error.value = null;
   try {
-    const response = await fetch(`${settingsStore.apiBaseUrl}/gallery/items?page=${page}&page_size=${limit}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-
+    const data = await apiClient.get('/gallery/items', {
+      params: { page, page_size: limit },
+    });
     galleryItems.value = data.items;
     totalItems.value = data.total_items;
     totalPages.value = data.total_pages;
     currentPage.value = data.page;
   } catch (err) {
     console.error("获取画廊项目失败:", err);
-    error.value = err; // 将错误对象直接赋给 error ref
-    galleryItems.value = [];
+    error.value = err.response?.data?.detail || err.message || '加载画廊时发生未知错误';
   } finally {
     isLoading.value = false;
   }
@@ -101,179 +141,224 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 使用在 main.css 中定义的颜色变量 */
-.gallery-view-component {
-  padding: 10px 0; /* 调整组件本身的 padding */
-}
-
-.loading, .no-items { /* error-message 样式已在 main.css 定义 */
-  text-align: center;
-  padding: 40px 20px; /* 增加内边距 */
-  font-size: 1.2em;
-  color: var(--main-text-color);
-  background-color: var(--secondary-bg-color); /* 给一个背景，使其在暗色主题下更明显 */
-  border: 1px dashed var(--border-color); /* 使用虚线边框增加风格 */
-  margin: 20px;
-}
-.error-message { /* 如果需要在局部覆盖全局样式 */
-  margin: 20px;
-  border-radius: 0;
-}
-
+/* 画廊网格布局 */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* 可以根据需要调整minmax */
-  gap: 25px; /* 调整间距 */
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
 }
 
+/* 画廊项目卡片 */
 .gallery-item {
+  position: relative;
+  aspect-ratio: 4 / 3;
   background-color: var(--secondary-bg-color);
-  border: 1px solid var(--border-color);
-  padding: 15px; /* 调整内边距 */
-  border-radius: 0; /* 去掉圆角 */
-  text-align: center;
+  overflow: hidden;
+  border: 2px solid var(--border-color);
+  transition: all 0.3s ease;
   cursor: pointer;
-  transition: transform 0.2s ease-in-out, box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out;
-  /* 设计风格参考：可以考虑添加 scanlines 效果或轻微的噪点背景 */
+}
+.gallery-item:focus {
+  outline: 2px solid var(--primary-accent-color);
+  outline-offset: 2px;
 }
 
-.gallery-item:hover {
-  transform: translateY(-3px) scale(1.02); /* 轻微放大和上移 */
-  border-color: var(--primary-accent-color); /* 悬停时用强调色边框 */
-  box-shadow: 0 0 15px rgba(127, 0, 0, 0.4); /* 配合强调色的阴影 */
-}
-
-.gallery-item img {
-  max-width: 100%;
-  height: 200px; /* 固定高度 */
+.gallery-image {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  margin-bottom: 15px; /* 图片和标题间距 */
-  border: 1px solid var(--border-color); /* 图片也加一个边框 */
-  filter: grayscale(30%) sepia(20%); /* 可选：给图片一点复古/暗色调滤镜 */
+  transition: transform 0.4s ease;
 }
 
-.gallery-item h3 {
-  font-size: 1.05em; /* 调整字体大小 */
-  margin: 0 0 8px 0; /* 调整间距 */
+/* --- 新交互的核心样式 --- */
+/* 默认只显示标题的底部栏 */
+.item-title-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+  background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+  color: #fff;
+  transition: opacity 0.3s ease;
+}
+.item-title {
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--main-text-color);
-  font-weight: normal;
-  /* font-family: var(--font-pixel, var(--font-main)); */
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
 }
 
-.gallery-item p {
-  font-size: 0.8em;
-  color: #a0a0a0; /* 上传者信息颜色调暗一些 */
-}
-
-/* 分页样式 */
-.pagination {
+/* 悬浮时才完整显示的信息层 */
+.item-info-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 40px;
-  padding: 10px;
-}
-/* 分页按钮样式继承自 main.css 的 button 基础样式，这里可以微调 */
-.pagination button {
-  /* background-color: var(--secondary-bg-color); */
-  /* border-color: var(--border-color); */
-  /* color: var(--main-text-color); */
-  margin: 0 10px; /* 增加按钮间距 */
-  font-size: 0.9em;
-}
-/* .pagination button:hover:not(:disabled) {
-  background-color: var(--border-color);
-  border-color: var(--primary-accent-color);
-} */
-.pagination button:disabled {
-  /* opacity: 0.5; */ /* main.css 中已定义 */
-  /* cursor: not-allowed; */
-}
-.pagination span {
-  margin: 0 15px; /* 增加文字间距 */
-  font-size: 0.95em;
-  color: var(--main-text-color);
+  flex-direction: column;
+  justify-content: flex-end; /* 内容从底部开始 */
+  padding: 1.5rem;
+  box-sizing: border-box;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1));
+  opacity: 0; /* 默认完全透明 */
+  transition: opacity 0.4s ease;
 }
 
-/* 灯箱样式 */
+/* 鼠标悬浮时的变化 */
+.gallery-item:hover .item-info-overlay {
+  opacity: 1; /* 浮现 */
+}
+.gallery-item:hover .item-title-bar {
+  opacity: 0; /* 隐藏默认标题栏 */
+}
+.gallery-item:hover .gallery-image {
+  transform: scale(1.05); /* 图片放大 */
+}
+.item-title-hover {
+  font-family: var(--font-special), cursive;
+  font-size: 1.5rem;
+  margin: 0;
+}
+.item-author {
+  font-size: 1rem;
+  margin: 0.5rem 0 0;
+  font-style: italic;
+}
+
+
+/* 灯箱 (大图预览) - 样式与之前相同，但包含了新的下载按钮 */
 .lightbox-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.92); /* 更暗的背景 */
+  background-color: rgba(31, 29, 27, 0.95);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 1rem;
   box-sizing: border-box;
+  animation: fadeIn 0.3s ease;
 }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .lightbox-content {
-  background-color: var(--secondary-bg-color); /* 灯箱内容区域背景 */
-  padding: 25px 30px; /* 调整内边距 */
-  border-radius: 0; /* 去掉圆角 */
-  border: 2px solid var(--border-color); /* 灯箱边框 */
-  max-width: 90%;
-  max-height: 90vh;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  max-width: 95vw;
+  max-height: 95vh;
   position: relative;
-  text-align: center;
-  box-shadow: 0 0 25px rgba(0,0,0,0.7); /* 更强的阴影 */
+  background-color: var(--secondary-bg-color);
+  border: 2px solid var(--border-color);
+}
+@media (min-width: 1024px) {
+  .lightbox-content { flex-direction: row; max-width: 90vw; }
+}
+
+.lightbox-image {
+  flex-shrink: 1;
+  object-fit: contain;
+  min-width: 0;
+  min-height: 0;
+  background-color: #000;
+}
+@media (min-width: 1024px) {
+  .lightbox-image { border-right: 2px solid var(--border-color); }
+}
+
+.lightbox-details {
+  padding: 1.5rem;
+  box-sizing: border-box;
+  text-align: left;
+  overflow-y: auto;
+  flex-shrink: 0;
+  width: 100%;
+  max-height: 40vh;
+}
+@media (min-width: 1024px) {
+  .lightbox-details { width: 350px; max-height: none; }
+}
+
+.lightbox-details h2 {
+  font-family: var(--font-special), cursive;
+  font-size: 1.8rem;
+  margin: 0 0 1rem;
   color: var(--main-text-color);
 }
-
-.lightbox-content img {
-  max-width: 100%;
-  max-height: calc(90vh - 180px); /* 为标题、描述、关闭按钮留出更多空间 */
-  display: block;
-  margin: 0 auto 20px auto; /* 增加图片下间距 */
-  border: 1px solid var(--border-color);
-  /* filter: brightness(0.9); 可选：让图片稍微暗一点以融入暗色主题 */
-}
-
-.lightbox-content h2 {
-  margin-bottom: 15px;
-  font-size: 1.6em; /* 调整字体大小 */
-  color: var(--main-text-color);
-  font-weight: normal;
-  /* font-family: var(--font-pixel, var(--font-main)); */
-}
-
-.lightbox-content p {
-  margin-bottom: 10px;
-  color: #b0b0b0; /* 描述文字颜色 */
-  font-size: 0.95em;
+.lightbox-description {
+  font-size: 1rem;
   line-height: 1.7;
-}
-
-.close-button { /* 关闭按钮样式调整 */
-  position: absolute;
-  top: 10px; /* 调整位置 */
-  right: 10px;
-  background: var(--primary-accent-color); /* 使用强调色 */
   color: var(--main-text-color);
-  border: 1px solid darken(var(--primary-accent-color), 10%); /* 需要计算或手动指定更暗色 */
-  border-color: #600000; /* 手动指定 */
-  border-radius: 0; /* 去掉圆角 */
-  width: 36px; /* 增大点击区域 */
-  height: 36px;
-  font-size: 22px; /* 调整字体大小 */
-  font-weight: bold;
-  cursor: pointer;
-  line-height: 34px; /* 调整行高使 "×" 居中 */
-  text-align: center;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  opacity: 0.9;
+  margin-bottom: 2rem;
+}
+.lightbox-meta {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+  margin-bottom: 2rem;
 }
 
+/* 下载按钮样式 */
+.download-button {
+  display: block; /* 改为块级元素，占满整行 */
+  width: 100%;
+  padding: 12px 20px;
+  box-sizing: border-box;
+  background-color: var(--primary-accent-color);
+  color: var(--button-text-color);
+  text-align: center;
+  text-decoration: none;
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: 1.1rem;
+  border: 2px solid var(--border-color);
+  transition: background-color 0.2s;
+}
+.download-button:hover {
+  background-color: #6e3636;
+}
+
+.close-button {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 40px;
+  height: 40px;
+  background: var(--main-bg-color);
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  color: var(--main-text-color);
+  font-size: 2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s;
+}
 .close-button:hover {
-  background-color: #600000; /* 手动指定更深的红色 */
-  transform: scale(1.1);
+  transform: rotate(90deg) scale(1.1);
+  color: var(--primary-accent-color);
+}
+
+/* 分页组件样式 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 3rem;
+  padding: 1rem;
 }
 </style>

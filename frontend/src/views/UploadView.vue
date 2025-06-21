@@ -14,6 +14,14 @@
         </div>
 
         <div class="form-group">
+          <label for="builder-name">创作者 (成员名称):</label>
+          <input type="text" id="builder-name" v-model="builderName" required list="members-list" autocomplete="off" />
+          <datalist id="members-list">
+            <option v-for="member in existingMembers" :key="member.id" :value="member.name"></option>
+          </datalist>
+        </div>
+
+        <div class="form-group">
           <label for="image-file">选择图片文件:</label>
           <input type="file" id="image-file" @change="onFileSelected" accept="image/jpeg, image/png, image/gif" required />
           <div v-if="filePreviewUrl" class="image-preview-container">
@@ -34,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue'; // 确保导入 onMounted
 import { useAuthStore } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
 import { useRouter } from 'vue-router';
@@ -45,6 +53,8 @@ const router = useRouter();
 
 const title = ref('');
 const description = ref('');
+const builderName = ref(''); // 新增：创作者名称
+const existingMembers = ref([]); // 新增：用于存放成员列表
 const selectedFile = ref(null);
 const filePreviewUrl = ref('');
 const fileError = ref('');
@@ -56,6 +66,20 @@ const uploadStatus = ref(''); // 'success' or 'error'
 const MAX_FILE_SIZE_MB = 5; // 与后端配置一致
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif"]; // 与后端配置一致
+
+// 组件挂载时获取成员列表，为创作者输入框提供建议
+onMounted(async () => {
+  try {
+    const response = await fetch(`${settingsStore.apiBaseUrl}/members`); // 调用获取所有成员的接口
+    if (response.ok) {
+      existingMembers.value = await response.json();
+    } else {
+      console.error("无法加载成员列表");
+    }
+  } catch (err) {
+    console.error("获取成员列表失败:", err);
+  }
+});
 
 
 function onFileSelected(event) {
@@ -91,15 +115,15 @@ function onFileSelected(event) {
 }
 
 async function handleFileUpload() {
-  if (!selectedFile.value || fileError.value) {
-    uploadMessage.value = '请选择有效的文件并填写必要信息。';
+  if (!selectedFile.value || fileError.value || !builderName.value) {
+    uploadMessage.value = '请选择有效的文件并填写所有必填信息。';
     uploadStatus.value = 'error';
     return;
   }
   if (!authStore.isLoggedIn || !authStore.accessToken) {
     uploadMessage.value = '请先登录后再上传作品。';
     uploadStatus.value = 'error';
-    router.push({ name: 'login', query: { redirect: '/upload' }}); // 假设上传页路由名为 'upload'
+    router.push({ name: 'login', query: { redirect: '/upload' }});
     return;
   }
 
@@ -109,16 +133,16 @@ async function handleFileUpload() {
 
   const formData = new FormData();
   formData.append('title', title.value);
+  formData.append('builder_name', builderName.value); // 添加创作者名称
   if (description.value) {
     formData.append('description', description.value);
   }
   formData.append('image', selectedFile.value); // 'image' 对应后端 UploadFile 的参数名
 
   try {
-    const response = await fetch(`${settingsStore.apiBaseUrl}/gallery/upload`, { //
+    const response = await fetch(`${settingsStore.apiBaseUrl}/gallery/upload`, {
       method: 'POST',
       headers: {
-        // 'Content-Type': 'multipart/form-data' // fetch 会自动设置正确的 Content-Type 当 body 是 FormData
         'Authorization': `Bearer ${authStore.accessToken}`,
       },
       body: formData,
@@ -132,12 +156,11 @@ async function handleFileUpload() {
       // 清空表单
       title.value = '';
       description.value = '';
+      builderName.value = '';
       selectedFile.value = null;
       filePreviewUrl.value = '';
-      document.getElementById('image-file').value = null; // 清除文件输入框的值
+      document.getElementById('image-file').value = null;
 
-      // 可选：跳转到画廊页或新上传的作品详情页
-      // setTimeout(() => router.push('/gallery'), 2000);
     } else {
       uploadMessage.value = data.detail || '上传失败，请重试。';
       uploadStatus.value = 'error';
@@ -202,7 +225,7 @@ async function handleFileUpload() {
 }
 .form-group input[type="file"] {
     padding: 8px; /* 文件输入框的padding可能和其他输入框不同 */
-    /* 为了风格统一，可以考虑自定义文件输入框样式，但这通常比较复杂 */
+    /* 为了风格统一，可以考虑自定义文件输入框样式，这通常比较复杂 */
 }
 
 

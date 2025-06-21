@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useSettingsStore } from './settings'; // 1. 导入 settingsStore
+import { useSettingsStore } from './settings';
 
 // API 基地址常量不再需要在这里定义
 // const API_BASE_URL = 'http://localhost:8000'; // <--- 删除或注释掉这行
@@ -14,6 +14,10 @@ export const useAuthStore = defineStore('auth', () => {
     const accessToken = ref(localStorage.getItem('access_token') || null);
     const refreshToken = ref(localStorage.getItem('refresh_token') || null);
     const user = ref(JSON.parse(localStorage.getItem('user_info')) || null);
+
+
+    const isLoadingUser = ref(false);
+    const userError = ref(null);
 
     // --- Getters ---
     const isLoggedIn = computed(() => !!accessToken.value);
@@ -58,31 +62,38 @@ export const useAuthStore = defineStore('auth', () => {
             setUserInfo(null);
             return null;
         }
+
+        // ++ 修改此函数 ++
+        isLoadingUser.value = true;
+        userError.value = null;
         try {
-            // 3. 使用 settingsStore 中的 apiBaseUrl
             const response = await fetch(`${settingsStore.apiBaseUrl}/users/me`, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken.value}`
-                }
+                headers: { 'Authorization': `Bearer ${accessToken.value}` }
             });
             if (response.ok) {
                 const userData = await response.json();
                 setUserInfo(userData);
                 return userData;
             } else {
-                console.error('获取用户信息失败:', response.status, await response.text());
+                const errorData = await response.text();
+                console.error('获取用户信息失败:', response.status, errorData);
+                userError.value = `获取用户信息失败 (状态: ${response.status})。`;
                 if (response.status === 401) {
-                    logout();
+                    logout(); // 令牌无效或过期，自动登出
                 }
                 setUserInfo(null);
                 return null;
             }
         } catch (error) {
             console.error('获取用户信息时发生网络错误:', error);
+            userError.value = '网络或服务器错误，无法获取用户信息。';
             setUserInfo(null);
             return null;
+        } finally {
+            isLoadingUser.value = false;
         }
     }
+
 
     function logout() {
         setTokens(null, null);

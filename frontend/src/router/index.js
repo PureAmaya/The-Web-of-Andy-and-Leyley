@@ -4,10 +4,9 @@ import { useAuthStore } from '../stores/auth' // 调整为你的实际路径
 import HomeView from '../views/HomeView.vue'
 import GalleryView from '../views/GalleryView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
-// import LoginView from '../views/LoginView.vue'
-// import RegisterView from '../views/RegisterView.vue'
+import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
 import UserProfileView from '../views/UserProfileView.vue'
-// 1. 导入 UploadView 组件
 import UploadView from '../views/UploadView.vue'
 
 const routes = [
@@ -28,18 +27,18 @@ const routes = [
     meta: { guestOnly: true } // 未登录用户访问
   },
 
-  // {
-  //   path: '/login',
-  //   name: 'login',
-  //   component: LoginView,
-  //   meta: { guestOnly: true }
-  // },
-  // {
-  //   path: '/register',
-  //   name: 'register',
-  //   component: RegisterView,
-  //   meta: { guestOnly: true }
-  // },
+ {
+    path: '/login',
+    name: 'login',
+    component: LoginView,
+    meta: { guestOnly: true }
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: RegisterView,
+    meta: { guestOnly: true }
+  },
 
   {
     path: '/profile',

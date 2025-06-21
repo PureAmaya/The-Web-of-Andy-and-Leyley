@@ -347,3 +347,19 @@ class GalleryItemUpdate(GalleryItemBase):
        用于更新画廊项目时接收的请求体模型。
        """
     pass
+
+
+# 用于友情链接的模型
+class FriendLink(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, description="链接名称")
+    url: str = Field(description="链接地址")
+    logo_url: Optional[str] = Field(default=None, description="Logo图片的URL")
+    display_order: int = Field(default=0, description="显示顺序，数字越小越靠前")
+
+# 用于API响应的Pydantic模型
+class FriendLinkRead(SQLModel):
+    id: int
+    name: str
+    url: str
+    logo_url: Optional[str] = None

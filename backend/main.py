@@ -1,41 +1,29 @@
 ﻿# backend/main.py
+import datetime
 import logging
 import shutil
+import sys
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, List
+
+import httpx
 import uvicorn
+from PIL import Image as PILImage
+from PIL.Image import Resampling
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, Query
-from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import datetime
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func  # 确保导入
-from sqlmodel import Session, select, SQLModel  # 确保导入 SQLModel
+from sqladmin import Admin
+from sqlmodel import SQLModel  # 确保导入 SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.responses import StreamingResponse
 
 from backend import crud
-# 项目内部模块导入
-# 假设所有这些文件都在 backend 目录或其子目录中，并且 Python 的导入路径能正确解析
-from backend.database import get_session, get_async_session  # create_db_and_tables 不再需要从这里导入
-from backend.models import (
-    User,
-    UserCreate,
-    UserRead,
-    VerificationToken,  # 用于邮件验证和密码重置中的令牌删除逻辑
-    PasswordResetToken,  # 用于密码重置逻辑
-    Token,
-    RefreshTokenRequest,
-    UserPasswordUpdate,
-    UserUpdate,
-    PasswordResetRequest,
-    PasswordResetForm,
-    GalleryItemCreate,
-    GalleryItem,
-    GalleryItemUpdate,  # 你可能需要创建一个用于更新的模型
-    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate  # 使用新的响应模型
-)
+from backend.admin import admin_views
+from backend.admin_auth import authentication_backend
 from backend.auth_utils import (
     get_password_hash,
     generate_email_verification_token,
@@ -46,13 +34,30 @@ from backend.auth_utils import (
     get_current_active_user,
     verify_refresh_token_and_get_token_data,
     generate_password_reset_token,  # 已在 auth_utils.py 中
-    verify_password_reset_token  # 已在 auth_utils.py 中
+    verify_password_reset_token, get_current_admin_user  # 已在 auth_utils.py 中
 )
-from backend.email_utils import send_verification_email, send_password_reset_email
 from backend.core.config import settings
-from PIL import Image as PILImage
-from PIL.Image import Resampling
-import io
+from backend.crud import get_friend_links
+# 项目内部模块导入
+# 假设所有这些文件都在 backend 目录或其子目录中，并且 Python 的导入路径能正确解析
+from backend.database import get_async_session, sync_engine  # create_db_and_tables 不再需要从这里导入
+from backend.email_utils import send_verification_email, send_password_reset_email
+from backend.models import (
+    User,
+    UserCreate,
+    UserRead,
+    # 用于邮件验证和密码重置中的令牌删除逻辑
+    # 用于密码重置逻辑
+    Token,
+    RefreshTokenRequest,
+    UserPasswordUpdate,
+    UserUpdate,
+    PasswordResetRequest,
+    PasswordResetForm,
+    GalleryItemCreate,
+    # 你可能需要创建一个用于更新的模型
+    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate, FriendLinkRead  # 使用新的响应模型
+)
 
 # --- 上传文件存储目录定义 ---
 UPLOAD_DIR = Path(__file__).parent / "uploads"  # 将目录放在 backend 文件夹内
@@ -87,6 +92,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- Admin Panel Setup ---
+admin = Admin(app, sync_engine, authentication_backend=authentication_backend)
+
+# 注册所有视图
+for view in admin_views:
+    admin.add_view(view)
+
 # --- CORS 中间件设置 ---
 configured_origins = [
     settings.PORTAL_FRONTEND_BASE_URL,
@@ -114,6 +126,32 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 @app.get("/", tags=["General"])
 async def read_root():
     return {"message": f"欢迎来到 {settings.MAIL_FROM_NAME} API"}
+
+
+# --- 新增：Minecraft 头像代理接口 ---
+# 把它放在其他路由定义之前
+@app.get("/avatars/mc/{username}", tags=["Public"])
+async def get_mc_avatar(username: str):
+    """
+    一个代理接口，用于从 cravatar.eu 获取 Minecraft 头像，以避免客户端跨域或网络问题。
+    """
+    avatar_url = f"https://cravatar.eu/avatar/{username}/128.png"
+    async with httpx.AsyncClient() as client:
+        try:
+            # 使用流式请求，提高效率
+            req = client.build_request("GET", avatar_url, timeout=10.0)
+            r = await client.send(req, stream=True)
+            r.raise_for_status()  # 如果请求失败 (如 404), 则会抛出异常
+
+            # 将 cravatar 的响应头和内容流式传输给客户端
+            return StreamingResponse(r.aiter_bytes(), headers=r.headers)
+
+        except httpx.HTTPStatusError as e:
+            # 如果 cravatar 返回 404 (用户不存在), 则也返回 404
+            raise HTTPException(status_code=e.response.status_code, detail="Avatar not found.")
+        except Exception as e:
+            # 其他网络错误
+            raise HTTPException(status_code=502, detail=f"Could not fetch avatar from upstream server: {e}")
 
 
 # --- 认证相关端点 ---
@@ -465,6 +503,15 @@ async def delete_member(
 
     await crud.delete_member(db=session, member=db_member)
     return
+
+
+@app.get("/friend-links", response_model=list[FriendLinkRead], tags=["Public"])
+async def read_friend_links(db: AsyncSession = Depends(get_async_session)):
+    """
+    获取所有公开的友情链接列表
+    """
+    links = await get_friend_links(db)
+    return links
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---
 if __name__ == "__main__":
