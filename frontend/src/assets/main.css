@@ -58,8 +58,6 @@ body {
     line-height: 1.6; /* 增加行高，提升衬线字体的可读性 */
     font-size: 16px; /* 适当增大基础字号 */
     font-weight: 400;
-    /* 添加细微的背景纹理 */
-    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4d5eXlzc3OLi4ubm5uVlZWPj4+NjY19fX2JiYl/f39tbW1paWhzc3NwcDBvbnVvb2N8fHx+fn5/f3//f38fHx8fRpkgAAAAR0lEQVR42qzAQAMAwUAwA2KO/p9v+wpr3RA6QJLh7AENLmMQ+xHyL9uG6w0cBF93W/2wA3h2jgHWfPDeBvFenqgIA695gAAAAAElFTkSuQmCC');
     background-repeat: repeat;
     text-rendering: optimizeLegibility; /* 优化衬线字体的渲染 */
 }

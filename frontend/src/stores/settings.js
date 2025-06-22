@@ -1,28 +1,29 @@
-﻿import {defineStore} from 'pinia';
-import {ref} from 'vue';
+﻿import { defineStore } from 'pinia';
+import { ref } from 'vue';
 import apiClient from "@/api.js";
 
-// 定义两套颜色主题的变量值
-const lightThemeColors = { // 复古/羊皮纸风格
-    '--main-bg-color': '#f4f1e9',        // 灰白色/米色背景
-    '--secondary-bg-color': '#e8e3d9',   // 稍深的米色
-    '--main-text-color': '#3d352e',      // 深褐色文字
-    '--border-color': '#c5bbae',         // 灰褐色边框
-    '--link-color': '#5a4f45',           // 暗哑的棕色链接
-    '--link-hover-color': '#8c4343',     // 链接悬停时使用强调色
-    '--primary-accent-color': '#8c4343', // 不饱和的暗红色作为强调色
-    '--button-text-color': '#f4f1e9',    // 按钮文字用浅色
+// 定义日间模式的颜色主题变量
+const lightThemeColors = {
+    '--main-bg-color': '#f4f1e9',
+    '--secondary-bg-color': '#e8e3d9',
+    '--main-text-color': '#3d352e',
+    '--border-color': '#c5bbae',
+    '--link-color': '#5a4f45',
+    '--link-hover-color': '#8c4343',
+    '--primary-accent-color': '#8c4343',
+    '--button-text-color': '#f4f1e9',
     '--secondary-accent-color': '#38761d',
 };
 
+// 定义夜间模式的颜色主题变量
 const darkThemeColors = {
-    '--main-bg-color': '#121212',          // 非常深的木炭色背景
-    '--secondary-bg-color': '#1E1E1E',   // 稍亮的深灰色
-    '--main-text-color': '#E0E0E0',       // 柔和的白色文字，避免刺眼
-    '--border-color': '#333333',         // 更清晰的边框颜色
-    '--link-color': '#BBBBBB',           // 链接颜色，比正文亮
-    '--link-hover-color': '#FFFFFF',     // 链接悬停 - 纯白
-    '--primary-accent-color': '#B71C1C', // 保持一个深邃的红色作为强调色 (例如，Material Design的深红色)
+    '--main-bg-color': '#121212',
+    '--secondary-bg-color': '#1E1E1E',
+    '--main-text-color': '#E0E0E0',
+    '--border-color': '#333333',
+    '--link-color': '#BBBBBB',
+    '--link-hover-color': '#FFFFFF',
+    '--primary-accent-color': '#B71C1C',
     '--button-text-color': '#FFFFFF',
     '--secondary-accent-color': '#38761d',
 };
@@ -30,12 +31,9 @@ const darkThemeColors = {
 
 export const useSettingsStore = defineStore('settings', () => {
     // --- State ---
-    // 使用 import.meta.env 读取环境变量，并提供一个备用值
     const apiBaseUrl = ref(import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
-
-    const contactInfo = ref({}); // 联系信息
-    const beian = ref({}); // 备案信息
-
+    const contactInfo = ref({});
+    const beian = ref({});
     const availableThemes = ['light', 'dark', 'system'];
     const theme = ref(localStorage.getItem('theme_preference') || 'system');
     const currentAppliedTheme = ref('light');
@@ -47,7 +45,6 @@ export const useSettingsStore = defineStore('settings', () => {
 
     function applyThemeVariables(themeToApply) {
         const root = document.documentElement;
-        // 这里的逻辑会自动使用我们上面定义的新颜色对象
         const colors = themeToApply === 'dark' ? darkThemeColors : lightThemeColors;
         for (const [variable, value] of Object.entries(colors)) {
             root.style.setProperty(variable, value);
@@ -82,20 +79,21 @@ export const useSettingsStore = defineStore('settings', () => {
         }
     }
 
-    // 初始化函数，用于应用启动时加载配置
     async function initialize() {
+        // 步骤 1: 首先，专门加载和处理 site-config.json
         try {
-            const response = await fetch('/site-config.json'); // 从public目录加载配置文件
-            if (!response.ok) throw new Error("Config not found");
+            // 注意：这里使用原生 fetch，因为它不依赖于 apiClient 的 baseURL
+            const response = await fetch('/site-config.json');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch site-config.json with status ${response.status}`);
+            }
             const config = await response.json();
 
-            // --- 获取后端的公共配置 ---
-            const publicConfig = await apiClient.get('/config/public');
-            isRegistrationEnabled.value = publicConfig.enable_registration;
-
-            // 注意这里的逻辑：环境变量提供了初始值，但 site-config.json 中的值可以覆盖它
-            // 这提供了双重灵活性
+            // 步骤 2: 立刻更新 apiBaseUrl
+            // 确保后续所有 apiClient 请求都使用正确的地址
             apiBaseUrl.value = config.apiBaseUrl || apiBaseUrl.value;
+
+            // 更新其他非API依赖的配置
             contactInfo.value = config.contactInfo || {};
             beian.value = config.beian || {};
             heroSection.value = config.heroSection || {
@@ -105,11 +103,23 @@ export const useSettingsStore = defineStore('settings', () => {
             footer.value = config.footer || {};
 
         } catch (error) {
-            console.error('无法加载站点配置 (site-config.json):', error);
-            console.info('将使用默认配置。');
+            console.error('无法加载基础站点配置 (site-config.json):', error);
+            console.info('将使用默认配置，部分功能可能无法使用。');
+            // 加载基础配置失败，直接结束初始化，并初始化主题
+            initializeTheme();
+            return; // 提前返回，不再执行后续API调用
         }
 
-        // 加载完配置后，初始化主题
+        // 步骤 3: 在 apiBaseUrl 确保正确后，再进行依赖API的配置加载
+        try {
+            const publicConfig = await apiClient.get('/config/public');
+            isRegistrationEnabled.value = publicConfig.enable_registration;
+        } catch(error) {
+            console.error("无法从后端加载公共配置:", error);
+            // 这里可以设置一个默认值或显示错误信息，但不会影响 apiBaseUrl
+        }
+
+        // 步骤 4: 最后初始化主题
         initializeTheme();
     }
 
