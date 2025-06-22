@@ -1,5 +1,6 @@
+// src/router/index.js
 import {createRouter, createWebHistory} from 'vue-router'
-import {useAuthStore} from '../stores/auth' // 调整为你的实际路径
+import {useAuthStore} from '../stores/auth'
 
 import HomeView from '../views/HomeView.vue'
 import GalleryView from '../views/GalleryView.vue'
@@ -8,9 +9,11 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import UserProfileView from '../views/UserProfileView.vue'
 import UploadView from '../views/UploadView.vue'
-import RequestPasswordResetView from '../views/RequestPasswordResetView.vue';
+import RequestPasswordResetView from '../views/RequestPasswordResetView.vue'
+import AdminView from '../views/AdminView.vue'
+import VerifyEmailView from '../views/VerifyEmailView.vue'; // <--- 新增：导入 VerifyEmailView
+
 import {useSettingsStore} from "@/stores/settings.js"
-import AdminView from '../views/AdminView.vue';
 
 
 const routes = [
@@ -28,9 +31,15 @@ const routes = [
         path: '/reset-password',
         name: 'reset-password',
         component: ResetPasswordView,
-        meta: {guestOnly: true} // 未登录用户访问
+        meta: {guestOnly: true}
     },
-
+    // <--- 新增：邮箱验证路由
+    {
+        path: '/verify-email',
+        name: 'verify-email',
+        component: VerifyEmailView,
+        meta: {guestOnly: true} // 邮件验证通常是未登录用户访问
+    },
     {
         path: '/login',
         name: 'login',
@@ -53,22 +62,18 @@ const routes = [
         path: '/profile',
         name: 'profile',
         component: UserProfileView,
-        meta: {requiresAuth: true} // 需要认证
+        meta: {requiresAuth: true}
     },
-    // 2. 添加 /upload 路由
     {
         path: '/upload',
         name: 'upload',
         component: UploadView,
-        meta: {requiresAuth: true} // 标记此路由需要认证
+        meta: {requiresAuth: true}
     },
-
-    // 管理员路由
-     {
-        path: '/admin-dashboard', // 使用一个和后端不冲突的路径
+    {
+        path: '/admin-dashboard',
         name: 'admin-dashboard',
         component: AdminView,
-        // 添加 meta 字段来标记需要管理员权限
         meta: { requiresAuth: true, requiresAdmin: true }
     }
 ];
@@ -84,7 +89,7 @@ router.beforeEach((to, from, next) => {
 
     const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
     const guestOnly = to.matched.some(record => record.meta.guestOnly);
-    const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin); // 新增
+    const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
 
     if (to.name === 'register' && !settingsStore.isRegistrationEnabled) {
         return next({ name: 'home' });
@@ -94,10 +99,7 @@ router.beforeEach((to, from, next) => {
         return next({ name: 'login', query: { redirect: to.fullPath } });
     }
 
-    // --- 新增的管理员权限检查 ---
-    // 如果路由需要管理员权限，但当前用户不是管理员
     if (requiresAdmin && authStore.user?.role !== 'admin') {
-        // 重定向到首页或一个“无权限”页面
         return next({ name: 'home' });
     }
 
