@@ -6,7 +6,7 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union  # 导入 Union 用于文件类型提示
 
 import cv2
 import httpx
@@ -35,21 +35,17 @@ from backend.auth_utils import (
     create_refresh_token,
     get_current_active_user,
     verify_refresh_token_and_get_token_data,
-    generate_password_reset_token,  # 已在 auth_utils.py 中
-    verify_password_reset_token, get_current_admin_user  # 已在 auth_utils.py 中
+    generate_password_reset_token,
+    verify_password_reset_token, get_current_admin_user
 )
-from backend.core.config import get_settings, clear_settings_cache, Settings  # 导入 Settings 类型用于类型提示
+from backend.core.config import get_settings, clear_settings_cache, Settings
 from backend.crud import get_friend_links
-# 项目内部模块导入
-# 假设所有这些文件都在 backend 目录或其子目录中，并且 Python 的导入路径能正确解析
-from backend.database import get_async_session, sync_engine  # create_db_and_tables 不再需要从这里导入
+from backend.database import get_async_session, sync_engine
 from backend.email_utils import send_verification_email, send_password_reset_email
 from backend.models import (
     User,
     UserCreate,
     UserRead,
-    # 用于邮件验证和密码重置中的令牌删除逻辑
-    # 用于密码重置逻辑
     Token,
     RefreshTokenRequest,
     UserPasswordUpdate,
@@ -57,25 +53,21 @@ from backend.models import (
     PasswordResetRequest,
     PasswordResetForm,
     GalleryItemCreate,
-    # 你可能需要创建一个用于更新的模型
-    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate, FriendLinkRead, ItemType  # 使用新的响应模型
+    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate, FriendLinkRead, ItemType
 )
 
 # --- 上传文件存储目录定义 ---
-UPLOAD_DIR = Path(__file__).parent / "uploads"  # 将目录放在 backend 文件夹内
+UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 配置日志记录器
 logging.basicConfig(
-    level=logging.INFO,  # 设置日志级别为 INFO
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     handlers=[
-        logging.StreamHandler(sys.stdout)  # 输出到控制台
-        # 如果需要，可以添加输出到文件的 Handler
-        # logging.FileHandler("app.log")
+        logging.StreamHandler(sys.stdout)
     ]
 )
-# 获取一个日志记录器实例
 logger = logging.getLogger(__name__)
 
 
@@ -88,7 +80,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title=get_settings().MAIL_FROM_NAME + " API",  # 使用配置中的名称
+    title=get_settings().MAIL_FROM_NAME + " API",
     version="0.1.0",
     lifespan=lifespan
 )
@@ -107,12 +99,10 @@ for view in admin_views:
     admin.add_view(view)
 
 # --- CORS 中间件设置 (在应用启动时读取一次配置) ---
-# 注意：CORS中间件在启动时配置，它的更改需要重启服务。
-# 这是FastAPI/Starlette中间件的特性。
 initial_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=initial_settings.cors_origins_list,  # 使用解析后的列表
+    allow_origins=initial_settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,7 +131,7 @@ async def read_root():
 
 
 @app.get("/config/public", response_model=PublicConfig, tags=["Public"])
-async def get_public_config(settings: Settings = Depends(get_settings)):  # <-- 依赖注入
+async def get_public_config(settings: Settings = Depends(get_settings)):
     """获取前端需要的、公开的后端配置信息。"""
     return PublicConfig(
         enable_registration=settings.ENABLE_REGISTRATION,
@@ -150,9 +140,8 @@ async def get_public_config(settings: Settings = Depends(get_settings)):  # <-- 
 
 
 # --- 新增：Minecraft 头像代理接口 ---
-# 把它放在其他路由定义之前
 @app.get("/avatars/mc/{username}", tags=["Public"])
-async def get_mc_avatar(username: str, settings: Settings = Depends(get_settings)):  # <-- 依赖注入
+async def get_mc_avatar(username: str, settings: Settings = Depends(get_settings)):
     """
     一个代理接口，用于从 cravatar.eu 获取 Minecraft 头像，以避免客户端跨域或网络问题。
     """
@@ -160,19 +149,15 @@ async def get_mc_avatar(username: str, settings: Settings = Depends(get_settings
 
     async with httpx.AsyncClient() as client:
         try:
-            # 使用流式请求，提高效率
             req = client.build_request("GET", avatar_url, timeout=10.0)
             r = await client.send(req, stream=True)
-            r.raise_for_status()  # 如果请求失败 (如 404), 则会抛出异常
+            r.raise_for_status()
 
-            # 将 cravatar 的响应头和内容流式传输给客户端
             return StreamingResponse(r.aiter_bytes(), headers=r.headers)
 
         except httpx.HTTPStatusError as e:
-            # 如果 cravatar 返回 404 (用户不存在), 则也返回 404
             raise HTTPException(status_code=e.response.status_code, detail="Avatar not found.")
         except Exception as e:
-            # 其他网络错误
             raise HTTPException(status_code=502, detail=f"Could not fetch avatar from upstream server: {e}")
 
 
@@ -200,15 +185,20 @@ async def register_user(
     if user_create.mc_name and await crud.get_user_by_mc_name(db=session, mc_name=user_create.mc_name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该 Minecraft 用户名已被关联")
 
+    # crud.create_user 内部将处理 created_at 和 updated_at 为 offset-naive
     db_user = await crud.create_user(db=session, user_create=user_create)
 
     raw_token = generate_email_verification_token(db_user.email)
+
+    # 获取当前 UTC 时间，并去除时区信息，用于 expires_at 字段
+    expires_at_naive = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)).replace(tzinfo=None)
+
     await crud.create_verification_token(
         db=session,
         user_id=db_user.id,
         token_hash=get_password_hash(raw_token),
-        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)
+        expires_at=expires_at_naive  # 修改为去除时区信息的 datetime
     )
     background_tasks.add_task(send_verification_email, email_to=db_user.email, username=db_user.username,
                               token=raw_token)
@@ -228,7 +218,7 @@ async def verify_email_address(token: str, session: AsyncSession = Depends(get_a
         return {"message": "邮箱已成功验证"}
 
     user.is_verified = True
-    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)  # 修改这里
     await session.commit()
     await session.refresh(user)
 
@@ -286,12 +276,14 @@ async def request_password_reset(reset_request: PasswordResetRequest, background
     if user:
         try:
             raw_token = generate_password_reset_token(user.email)
+            # 获取当前 UTC 时间，并去除时区信息，用于 expires_at 字段
+            expires_at_naive = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+                seconds=settings.PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS)).replace(tzinfo=None)
             await crud.create_password_reset_token(
                 db=session,
                 user_id=user.id,
                 token_hash=get_password_hash(raw_token),
-                expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-                    seconds=settings.PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS)
+                expires_at=expires_at_naive  # 修改为去除时区信息的 datetime
             )
             background_tasks.add_task(send_password_reset_email, email_to=user.email, username=user.username,
                                       token=raw_token)
@@ -360,13 +352,12 @@ GALLERY_TAGS = ["Gallery"]
 def create_image_thumbnail(
         original_image_path: Path,
         thumbnail_save_path: Path,
-        size: tuple[int, int] = (400, 400)  # 可以将缩略图尺寸调大一些
+        size: tuple[int, int] = (400, 400)
 ):
     """为图片文件创建缩略图"""
     try:
         with PILImage.open(original_image_path) as img:
             img.thumbnail(size, Resampling.LANCZOS)
-            # 确保转换成 RGB 以便保存为 JPG 或 PNG
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             img.save(thumbnail_save_path)
@@ -389,13 +380,12 @@ def create_video_thumbnail(
             logger.error(f"无法打开视频文件: {video_path}")
             return False
 
-        ret, frame = cap.read()  # 读取第一帧
+        ret, frame = cap.read()
         if not ret:
             logger.error(f"无法从视频读取帧: {video_path}")
             cap.release()
             return False
 
-        # 使用 Pillow 调整帧的大小并保存
         frame_pil = PILImage.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         frame_pil.thumbnail(size, Resampling.LANCZOS)
         frame_pil.save(thumbnail_save_path)
@@ -414,12 +404,11 @@ async def upload_gallery_item(
         title: str = File(...),
         builder_name: str = File(...),
         description: Optional[str] = File(None),
-        image: UploadFile = File(...),  # 参数名保持不变，但现在可以接收视频
+        image: UploadFile = File(...),
         session: AsyncSession = Depends(get_async_session),
         current_user: User = Depends(get_current_active_user),
         settings: Settings = Depends(get_settings)
 ):
-    # 步骤 1: 扩展文件类型验证
     if image.content_type not in settings.allowed_mime_types_list:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {image.content_type}.")
 
@@ -427,31 +416,26 @@ async def upload_gallery_item(
     if image.size > max_file_size_bytes:
         raise HTTPException(status_code=400, detail=f"文件过大，最大允许 {settings.UPLOAD_MAX_SIZE_MB}MB.")
 
-    # 步骤 2: 判断项目类型
     item_type: ItemType
     if image.content_type.startswith("video/"):
         item_type = ItemType.VIDEO
     else:
         item_type = ItemType.IMAGE
 
-    # 步骤 3: 生成唯一文件名
     file_extension = Path(image.filename).suffix.lower()
     if not file_extension:
-        # 如果没有扩展名，根据MIME类型猜测一个
         ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "video/mp4": ".mp4"}
         file_extension = ext_map.get(image.content_type, ".dat")
 
     unique_filename_base = str(uuid.uuid4())
     original_filename = f"{unique_filename_base}{file_extension}"
-    thumbnail_filename = f"{unique_filename_base}_thumb.jpg"  # 统一缩略图为 jpg 格式
+    thumbnail_filename = f"{unique_filename_base}_thumb.jpg"
 
     original_file_location = UPLOAD_DIR / original_filename
     thumbnail_file_location = UPLOAD_DIR / thumbnail_filename
 
-    # 步骤 4: 获取或创建成员
     member = await crud.get_or_create_member(db=session, name=builder_name)
 
-    # 步骤 5: 保存上传的原始文件
     try:
         with open(original_file_location, "wb+") as file_object:
             shutil.copyfileobj(image.file, file_object)
@@ -461,7 +445,6 @@ async def upload_gallery_item(
     finally:
         image.file.close()
 
-    # 步骤 6: 根据类型创建缩略图
     thumbnail_url_to_store = None
     if item_type == ItemType.IMAGE:
         if create_image_thumbnail(original_file_location, thumbnail_file_location):
@@ -472,13 +455,12 @@ async def upload_gallery_item(
 
     image_url_to_store = f"/uploads/{original_filename}"
 
-    # 步骤 7: 写入数据库
     item_create_data = GalleryItemCreate(
         title=title,
         description=description,
         image_url=image_url_to_store,
         thumbnail_url=thumbnail_url_to_store,
-        item_type=item_type  # 传入项目类型
+        item_type=item_type
     )
 
     db_gallery_item = await crud.create_gallery_item(
@@ -488,7 +470,6 @@ async def upload_gallery_item(
         member_id=member.id
     )
 
-    # 重新加载关系以确保在响应中包含 builder 信息
     await session.refresh(db_gallery_item, attribute_names=["builder"])
 
     return db_gallery_item
@@ -509,9 +490,7 @@ async def get_gallery_items(
         page: int = Query(1, ge=1),
         page_size: int = Query(None, ge=1)
 ):
-    # 如果用户没有提供 page_size，则使用配置中的默认值
     effective_page_size = page_size if page_size is not None else settings.GALLERY_DEFAULT_PAGE_SIZE
-    # 限制 page_size 不能超过配置中的最大值
     if effective_page_size > settings.GALLERY_MAX_PAGE_SIZE:
         effective_page_size = settings.GALLERY_MAX_PAGE_SIZE
 
@@ -525,8 +504,6 @@ async def get_gallery_items(
 class GalleryItemUpdate(SQLModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    # 可以添加修改 builder 的逻辑
-    # builder_name: Optional[str] = None
 
 
 @app.patch("/gallery/items/{item_id}", response_model=GalleryItemReadWithBuilder, tags=GALLERY_TAGS)
@@ -562,11 +539,9 @@ async def create_member(member_data: MemberCreate, session: AsyncSession = Depen
                         current_user: User = Depends(get_current_active_user)):
     if await crud.get_member_by_name(db=session, name=member_data.name):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该名称的成员已存在")
-    # In a real app, you might want to move model_validate into the crud function
-    db_member = Member.model_validate(member_data)
-    session.add(db_member)
-    await session.commit()
-    await session.refresh(db_member)
+
+    # 直接将 member_data 传递给 crud 函数，让 crud 函数处理创建逻辑
+    db_member = await crud.create_member(db=session, member_data=member_data)
     return db_member
 
 
@@ -592,7 +567,6 @@ async def delete_member(
 ):
     db_member = await crud.get_member_by_id(db=session, member_id=member_id)
     if not db_member:
-        # 细节：即使是管理员，也应该告诉他资源不存在
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
 
     await crud.delete_member(db=session, member=db_member)
@@ -614,6 +588,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # 建议在调试启动问题时先设为 False
+        reload=False,
         log_level="info"
     )

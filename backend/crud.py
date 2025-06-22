@@ -1,11 +1,11 @@
 ﻿# backend/crud.py
 
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union  # 导入 Tuple 和 Union
 
 from sqlalchemy import func, desc
 from sqlalchemy.orm import selectinload
-from sqlmodel import select
+from sqlmodel import select, col  # 导入 col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend import models
@@ -18,6 +18,7 @@ async def get_user_by_mc_name(db: AsyncSession, mc_name: str) -> Optional[models
     """通过 Minecraft 用户名获取用户"""
     result = await db.exec(select(models.User).where(models.User.mc_name == mc_name))
     return result.first()
+
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> Optional[models.User]:
     """通过 ID 获取用户"""
@@ -40,14 +41,19 @@ async def create_user(db: AsyncSession, user_create: models.UserCreate) -> model
     """创建一个新用户"""
     hashed_password = get_password_hash(user_create.password)
 
-    # model_validate 时，强制覆盖角色为 'user'
+    # 获取当前 UTC 时间，并去除时区信息，使其变为 offset-naive
+    current_utc_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+    # model_validate 时，强制覆盖角色为 'user'，并设置创建和更新时间
     db_user = models.User.model_validate(
         user_create,
         update={
             "hashed_password": hashed_password,
             "is_verified": False,
             "is_active": True,
-            "role": models.UserRole.USER  # <--- 强制设置为普通用户
+            "role": models.UserRole.USER,  # <--- 强制设置为普通用户
+            "created_at": current_utc_naive,  # 设置为去除时区信息的 datetime
+            "updated_at": current_utc_naive  # 设置为去除时区信息的 datetime
         }
     )
 
@@ -63,7 +69,9 @@ async def update_user(db: AsyncSession, user: models.User, user_update: models.U
     update_data = user_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(user, key, value)
-    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    # 更新 updated_at 字段，并去除时区信息
+    user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -73,9 +81,12 @@ async def update_user(db: AsyncSession, user: models.User, user_update: models.U
 async def update_user_password(db: AsyncSession, user: models.User, new_password: str) -> models.User:
     """更新用户密码"""
     user.hashed_password = get_password_hash(new_password)
-    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    # 更新 updated_at 字段，并去除时区信息
+    user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(user)
     await db.commit()
+    # 注意：这里缺少 await db.refresh(user)，如果后续操作需要 fresh 的 user 对象，请添加
+    await db.refresh(user)  # 建议添加这一行，确保返回的对象是最新的状态
     return user
 
 
@@ -84,9 +95,16 @@ async def update_user_password(db: AsyncSession, user: models.User, new_password
 async def create_verification_token(db: AsyncSession, user_id: int, token_hash: str,
                                     expires_at: datetime.datetime) -> models.VerificationToken:
     """创建邮件验证令牌"""
+    # 确保 expires_at 在传入或存储时是 offset-naive
+    # 尽管 main.py 中已经处理了，但在此处也添加一层保护，以防万一
+    if expires_at.tzinfo is not None:
+        expires_at = expires_at.replace(tzinfo=None)
+
     token = models.VerificationToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
     db.add(token)
     await db.commit()
+    # 令牌创建后通常不需要 refresh，但为了保持一致性可以添加
+    await db.refresh(token)
     return token
 
 
@@ -105,10 +123,16 @@ async def create_password_reset_token(db: AsyncSession, user_id: int, token_hash
     for t in existing_tokens_result.all():
         await db.delete(t)
 
+    # 确保 expires_at 在传入或存储时是 offset-naive
+    if expires_at.tzinfo is not None:
+        expires_at = expires_at.replace(tzinfo=None)
+
     # 创建新令牌
     token = models.PasswordResetToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
     db.add(token)
     await db.commit()
+    # 令牌创建后通常不需要 refresh，但为了保持一致性可以添加
+    await db.refresh(token)
     return token
 
 
@@ -118,7 +142,7 @@ async def get_password_reset_token_by_hash(db: AsyncSession, token_hash: str) ->
     return result.first()
 
 
-async def delete_db_token(db: AsyncSession, token: models.VerificationToken | models.PasswordResetToken):
+async def delete_db_token(db: AsyncSession, token: Union[models.VerificationToken, models.PasswordResetToken]):
     """从数据库中删除一个令牌"""
     await db.delete(token)
     await db.commit()
@@ -141,7 +165,9 @@ async def get_or_create_member(db: AsyncSession, name: str) -> models.Member:
     """获取或创建成员"""
     member = await get_member_by_name(db, name)
     if not member:
-        member = models.Member(name=name)
+        # 创建新成员时，设置 created_at 和 updated_at 为 offset-naive
+        current_utc_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        member = models.Member(name=name, created_at=current_utc_naive, updated_at=current_utc_naive)
         db.add(member)
         await db.commit()
         await db.refresh(member)
@@ -159,6 +185,9 @@ async def update_member(db: AsyncSession, member: models.Member, member_update: 
     update_data = member_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(member, key, value)
+
+    # 更新 updated_at 字段，并去除时区信息
+    member.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(member)
     await db.commit()
     await db.refresh(member)
@@ -175,10 +204,17 @@ async def delete_member(db: AsyncSession, member: models.Member):
 
 async def get_gallery_item_by_id(db: AsyncSession, item_id: int) -> Optional[models.GalleryItem]:
     """通过 ID 获取画廊作品"""
-    return await db.get(models.GalleryItem, item_id)
+    # 考虑到关联查询，使用 selectinload 可能更优，尽管 get 也能工作
+    result = await db.exec(
+        select(models.GalleryItem)
+        .where(models.GalleryItem.id == item_id)
+        .options(selectinload(models.GalleryItem.builder), selectinload(models.GalleryItem.uploader))
+    )
+    return result.first()
 
 
-async def get_paginated_gallery_items(db: AsyncSession, page: int, page_size: int) -> (int, List[models.GalleryItem]):
+async def get_paginated_gallery_items(db: AsyncSession, page: int, page_size: int) -> Tuple[
+    int, List[models.GalleryItem]]:
     """分页获取画廊作品"""
     offset = (page - 1) * page_size
 
@@ -210,9 +246,17 @@ async def get_paginated_gallery_items(db: AsyncSession, page: int, page_size: in
 async def create_gallery_item(db: AsyncSession, item_create: models.GalleryItemCreate, user_id: int,
                               member_id: int) -> models.GalleryItem:
     """创建画廊作品"""
+    # 获取当前 UTC 时间，并去除时区信息，使其变为 offset-naive
+    current_utc_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
     db_item = models.GalleryItem.model_validate(
         item_create,
-        update={"user_id": user_id, "member_id": member_id}
+        update={
+            "user_id": user_id,
+            "member_id": member_id,
+            "uploaded_at": current_utc_naive,  # 假设您的模型中是 uploaded_at
+            "updated_at": current_utc_naive  # 假设您的模型中是 updated_at
+        }
     )
     db.add(db_item)
     await db.commit()
@@ -226,7 +270,9 @@ async def update_gallery_item(db: AsyncSession, item: models.GalleryItem,
     update_data = item_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(item, key, value)
-    item.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    # 更新 updated_at 字段，并去除时区信息
+    item.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -239,7 +285,9 @@ async def delete_gallery_item(db: AsyncSession, item: models.GalleryItem):
     await db.commit()
 
 
+# --- FriendLink CRUD ---
+
 async def get_friend_links(db: AsyncSession) -> list[models.FriendLink]:
     """获取所有友情链接，按显示顺序排序"""
-    result = await db.execute(select(models.FriendLink).order_by(models.FriendLink.display_order))
+    result = await db.exec(select(models.FriendLink).order_by(models.FriendLink.display_order))
     return result.scalars().all()
