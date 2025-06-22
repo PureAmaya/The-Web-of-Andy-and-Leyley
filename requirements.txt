@@ -1,17 +1,48 @@
-﻿# 限制 NumPy 版本以兼容旧版 OpenCV
-numpy<2.0
-pydantic-settings~=2.6.1
-pydantic~=2.11.5
-uvicorn~=0.32.1
-fastapi~=0.115.12
-sqlalchemy~=2.0.41
-sqlmodel~=0.0.24
-pillow~=11.2.1
-passlib~=1.7.4
-itsdangerous~=2.2.0
-python-jose~=3.5.0
-alembic~=1.16.1
-sqladmin~=0.20.1
-starlette~=0.46.2
-httpx~=0.28.1
+﻿# requirements.txt
+
+# --- Core Framework & Web Server ---
+# FastAPI and its essential components
+fastapi~=0.111.0
+pydantic~=2.7.1
+pydantic-settings~=2.2.1
+# ASGI server for development and production
+uvicorn[standard]~=0.29.0
+
+# --- Database & ORM ---
+# SQLAlchemy core and SQLModel for data mapping
+sqlalchemy~=2.0.29
+sqlmodel~=0.0.18
+# Database migration tool
+alembic~=1.13.1
+
+# --- Database Drivers ---
+# Asynchronous driver for PostgreSQL, used by FastAPI
+asyncpg~=0.29.0
+# Synchronous driver for PostgreSQL, used by Alembic
+psycopg2-binary~=2.9.9
+
+# --- Authentication & Security ---
+# For password hashing and verification
+passlib[bcrypt]~=1.7.4
+# For handling JSON Web Tokens (JWT)
+python-jose[cryptography]~=3.3.0
+# For generating and verifying time-sensitive tokens (e.g., email verification)
+itsdangerous~=2.1.2
+
+# --- File & Media Processing ---
+# For handling form data and file uploads in FastAPI
+python-multipart~=0.0.9
+# For image thumbnail generation
+pillow~=10.3.0
+# For video thumbnail generation (headless version for servers)
 opencv-python-headless~=4.9.0
+
+# --- Admin Panel ---
+# For the automatic admin interface
+sqladmin~=0.16.1
+
+# --- Utilities & Services ---
+# For sending emails (e.g., registration, password reset)
+fastapi-mail~=1.4.1
+# For making HTTP requests (used for the Minecraft avatar proxy)
+httpx~=0.27.0
