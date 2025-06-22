@@ -190,6 +190,8 @@
 
 本指南将引导您从一台全新的服务器（以 **Ubuntu 22.04** 为例）开始，完整地部署您的全栈应用。
 
+仅供参考，您可以根据自身的具体需求进行部署。
+
 ### 阶段一：服务器准备与环境安装
 
 1.  **更新系统**
@@ -255,7 +257,7 @@
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
-    pip install gunicorn  # 安装 Gunicorn 作为生产服务器
+    pip install uvicorn 
     ```
 
 3.  **配置生产环境变量**
@@ -332,7 +334,7 @@
     Group=www-data
     WorkingDirectory=/path/to/your/project/The-Web-of-Andy-and-Leyley
     Environment="PATH=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin"
-    ExecStart=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 backend.main:app
+    ExecStart=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin/uvicorn -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 backend.main:app
     
     [Install]
     WantedBy=multi-user.target
