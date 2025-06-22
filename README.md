@@ -228,6 +228,7 @@
 
 1.  **创建数据库和用户**
     登录 PostgreSQL 控制台，创建一个专用的数据库和用户。
+    
     ```bash
     sudo -u postgres psql
     ```
@@ -394,7 +395,7 @@
         # 将所有 /api/ 的请求反向代理到后端 FastAPI 服务
         location /api/ {
             client_max_body_size 50M; # 必须大于等于 .env 中的 UPLOAD_MAX_SIZE_MB
-            proxy_pass http://127.0.0.1:8000;
+            proxy_pass http://127.0.0.1:8000/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
