@@ -1,7 +1,4 @@
-﻿```python
-# backend/crud.py
-
-import datetime
+﻿import datetime
 from typing import List, Optional, Tuple, Union
 
 from sqlalchemy import func, desc
