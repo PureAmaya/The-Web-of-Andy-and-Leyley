@@ -4,14 +4,17 @@ from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from backend.auth_utils import get_password_hash, verify_password, create_access_token
-from backend.core.config import settings
+from backend.auth_utils import  verify_password, create_access_token
+from backend.core.config import get_settings
 from backend.crud import get_user_by_username
 from backend.database import get_async_session
 from backend.models import UserRole
 
+settings = get_settings()
+
 # 这是 SQLAdmin 用来存储会话令牌的密钥，应该是保密的
 SECRET_KEY = settings.JWT_SECRET_KEY
+
 
 
 class AdminAuth(AuthenticationBackend):

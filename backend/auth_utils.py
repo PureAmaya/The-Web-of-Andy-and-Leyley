@@ -1,22 +1,22 @@
 ﻿# backend/auth_utils.py
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
-from typing import Optional
-from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from pydantic import ValidationError  # 用于捕获 TokenData 的校验错误
+from sqlmodel import Session  # 导入 SQLModel Session 和 select
 
 # 假设这些可以从您的项目中正确导入
-from backend.core.config import settings  # 导入 settings 对象
-from backend.models import TokenData, User, UserRole  # 导入 Pydantic/SQLModel 模型
+from backend.core.config import get_settings
 from backend.database import get_session  # 导入 get_session 依赖
-from sqlmodel import Session, select  # 导入 SQLModel Session 和 select
+from backend.models import TokenData, User, UserRole  # 导入 Pydantic/SQLModel 模型
 
-
+settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # --- OAuth2PasswordBearer Scheme ---
