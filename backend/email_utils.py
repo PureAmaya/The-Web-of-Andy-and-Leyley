@@ -33,31 +33,29 @@ async def send_email(subject: str, recipients: list[EmailStr], html_body: str):
     msg.add_header('Content-Type', 'text/html')
     msg.set_payload(html_body, 'utf-8')
 
+    logger.info(f"准备在后台任务中发送邮件至 {recipients}...")
     try:
-        if port == 465:
-            # 使用 SSL
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+        # 完全复用您成功的测试脚本逻辑
+        if port == 587:
+            with smtplib.SMTP(smtp_server, port, timeout=15) as server:
+                server.set_debuglevel(1)  # 打印详细交互日志
+                server.starttls()
                 server.login(username, password)
                 server.send_message(msg)
-        elif port == 587:
-            # 使用 STARTTLS
-            with smtplib.SMTP(smtp_server, port) as server:
-                server.starttls()  # 升级到安全连接
+        elif port == 465:
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(smtp_server, port, context=context, timeout=15) as server:
+                server.set_debuglevel(1)  # 打印详细交互日志
                 server.login(username, password)
                 server.send_message(msg)
         else:
-            logger.error(f"不支持的邮件端口: {port}。请使用 465 或 587。")
+            logger.error(f"不支持的邮件端口: {port}。")
             return
 
-        logger.info(f"邮件已成功发送至: {', '.join(recipients)}")
-
-    except smtplib.SMTPAuthenticationError:
-        logger.error("邮件发送失败: SMTP认证错误。请检查您的MAIL_USERNAME和MAIL_PASSWORD。")
-        raise  # 重新抛出异常，以便上层能感知到错误
+        logger.info(f"后台邮件任务成功发送至: {recipients}")
     except Exception as e:
-        logger.error(f"邮件发送时发生未知错误: {e}")
-        raise # 重新抛出异常
+        logger.error("!!!!!! 后台邮件任务发送失败 !!!!!!")
+        logger.exception(e)  # 打印完整的错误堆栈
 
 
 async def send_verification_email(email_to: EmailStr, username: str, token: str):

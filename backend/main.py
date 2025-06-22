@@ -202,20 +202,16 @@ async def register_user(
 
     db_user = await crud.create_user(db=session, user_create=user_create)
 
-    try:
-        raw_token = generate_email_verification_token(db_user.email)
-        await crud.create_verification_token(
-            db=session,
-            user_id=db_user.id,
-            token_hash=get_password_hash(raw_token),
-            expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-                seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)
-        )
-        background_tasks.add_task(send_verification_email, email_to=db_user.email, username=db_user.username,
-                                  token=raw_token)
-    except Exception as e:
-        logger.error(f"创建用户 {db_user.username} 后，处理邮件验证时发生错误: {e}")
-
+    raw_token = generate_email_verification_token(db_user.email)
+    await crud.create_verification_token(
+        db=session,
+        user_id=db_user.id,
+        token_hash=get_password_hash(raw_token),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            seconds=settings.EMAIL_TOKEN_MAX_AGE_SECONDS)
+    )
+    background_tasks.add_task(send_verification_email, email_to=db_user.email, username=db_user.username,
+                              token=raw_token)
     return db_user
 
 
