@@ -1,5 +1,5 @@
 <div align="center">
-  <img src=""docs/icon.png" alt="logo" width="128" height="128" />
+  <img src="docs/icon.png" alt="logo" width="128" height="128" />
   <h1 style="font-weight:700; letter-spacing:1px; margin-bottom:0;">
     安迪和莉莉的网站 (The Web of Andy and Leyley)
   </h1>
