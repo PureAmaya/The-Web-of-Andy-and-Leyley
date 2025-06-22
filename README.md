@@ -65,7 +65,6 @@
 
   - **后台管理面板**: 集成了 SQLAdmin，为管理员提供了一个功能齐全的图形化界面，可直接在后台对**用户、作品、成员、友情链接**等所有数据模型进行增删改查操作。
   - **前端管理入口**: 新增了管理员专属的前端面板，简化了如配置重载等高级操作。
-  - **生产级部署**: 提供了基于 Gunicorn + Uvicorn (后端) 和 Nginx (前端) 的完整生产环境部署方案。
 
 ## 🛠️ 技术栈与第三方库 (Tech Stack & Libraries)
 
@@ -326,7 +325,7 @@
 
     ```ini
     [Unit]
-    Description=Gunicorn instance to serve my_minecraft_webapp
+    Description=Uvicorn instance to serve my_minecraft_webapp
     After=network.target
     
     [Service]
@@ -334,7 +333,7 @@
     Group=www-data
     WorkingDirectory=/path/to/your/project/The-Web-of-Andy-and-Leyley
     Environment="PATH=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin"
-    ExecStart=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin/uvicorn -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 backend.main:app
+    ExecStart=/path/to/your/project/The-Web-of-Andy-and-Leyley/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --workers 4
     
     [Install]
     WantedBy=multi-user.target
@@ -368,7 +367,7 @@
     现在我们配置 Nginx，让它处理来自公网的请求：
 
       - 直接提供前端的静态文件。
-      - 将所有 `/api/` 开头的请求转发给后台运行的 Gunicorn 服务。
+      - 将所有 `/api/` 开头的请求转发给后台运行的 **Uvicorn** 服务。
 
     创建一个新的 Nginx 配置文件：
 
