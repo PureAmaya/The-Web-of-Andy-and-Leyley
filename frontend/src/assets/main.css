@@ -68,13 +68,6 @@ body {
     padding: 0; /* 移除这里的 padding，让 App.vue 的 header/main/footer 自己控制 */
 }
 
-/* 手绘风格边框 */
-.team-member-card, .gallery-item {
-    border: 10px solid transparent; /* border-width 必须大于 0 */
-    border-image: url('@/assets/images/sketchy-border.png') 10 round;
-    /* '10' 是切割尺寸，'round' 是平铺方式 */
-}
-
 /* 调整输入框和按钮的样式以适应新风格 */
 input, textarea, button, select {
     border-radius: 0 !important; /* 强制无圆角 */

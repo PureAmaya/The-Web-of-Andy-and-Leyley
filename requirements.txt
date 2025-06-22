@@ -1,5 +1,5 @@
 ﻿# requirements.txt
-
+numpy<2.0
 # --- Core Framework & Web Server ---
 # FastAPI and its essential components
 fastapi~=0.111.0
