@@ -12,11 +12,17 @@ from sqlalchemy import pool
 # 将项目根目录添加到 sys.path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from backend.core.config import settings # 导入您的 settings
+# --- 核心修正：导入 get_settings 函数，而不是 settings 对象 ---
+from backend.core.config import get_settings
 from backend.models import SQLModel # 导入 SQLModel 基类
+
+# --- 新增：调用函数来获取配置实例 ---
+settings = get_settings()
 
 # 从 backend.models 中导入所有模型，确保 Alembic 能检测到它们
 # !!! 确保这里导入了所有定义了 table=True 的模型 !!!
+from backend import models # 确保所有模型都被加载
+
 # --- 新增部分结束 ---
 
 
