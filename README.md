@@ -121,7 +121,7 @@
 1. **克隆仓库并进入项目**
 
    ```
-   git clone https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley
+   git clone git@github.com:PureAmaya/The-Web-of-Andy-and-Leyley.git
    cd The-Web-of-Andy-and-Leyley-main
    ```
    
