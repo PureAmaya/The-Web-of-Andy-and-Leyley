@@ -17,9 +17,9 @@ async function initializeAndMountApp() {
   app.use(pinia)
 
   // 3. 在挂载应用前，先执行异步初始化
-  // 这一步是关键！
+  // 这一步是关键！它会暂停后续代码，直到配置加载完成。
   const settingsStore = useSettingsStore()
-  await settingsStore.initialize() // 等待 site-config.json 加载完毕
+  await settingsStore.initialize()
 
   // 4. 等所有配置都就绪后，再注册路由器和挂载应用
   app.use(router)
