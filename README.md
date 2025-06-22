@@ -1,4 +1,15 @@
-# <img src="docs/icon.png" style="zoom:2%;" /> 安迪和莉莉的网站 (The Web of Andy and Leyley)
+<div align="center">
+  <img src=""docs/icon.png" alt="logo" width="128" height="128" />
+  <h1 style="font-weight:700; letter-spacing:1px; margin-bottom:0;">
+    安迪和莉莉的网站 (The Web of Andy and Leyley)
+  </h1>
+
+  <p>
+    <a href=https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley/releases"><img alt="Version" src="https://img.shields.io/github/v/release/PureAmaya/The-Web-of-Andy-and-Leyley?style=for-the-badge&logo=github"></a>
+    <a href="https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PureAmaya/The-Web-of-Andy-and-Leyley?style=for-the-badge"></a>
+  </p>
+</div>
+
 
 这是一个全栈 Web 应用，灵感来源于《安迪和莉莉的棺材》（The Coffin of Andy and Leyley）的独特艺术风格。项目后端采用 FastAPI，前端采用 Vue.js，旨在打造一个集作品展示、用户交互和社区功能于一体的门户网站。
 
