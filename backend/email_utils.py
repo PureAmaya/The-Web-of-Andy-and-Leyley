@@ -1,53 +1,72 @@
-﻿# email_utils.py
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+﻿# 文件: backend/email_utils.py
+
+import smtplib
+import ssl
+from email.message import EmailMessage
 from pydantic import EmailStr
 import logging
-from backend.core.config import get_settings  # 导入配置
 
+# 导入您的应用配置
+from backend.core.config import get_settings
 
-settings = get_settings()
-
-# 1. 创建邮件连接配置
-mail_conf = ConnectionConfig(
-    MAIL_USERNAME=settings.MAIL_USERNAME,
-    MAIL_PASSWORD=settings.MAIL_PASSWORD,
-    MAIL_FROM=settings.MAIL_FROM,
-    MAIL_PORT=settings.MAIL_PORT,
-    MAIL_SERVER=settings.MAIL_SERVER,
-    MAIL_STARTTLS=settings.MAIL_STARTTLS,
-    MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,  # 在生产环境中应为 True，确保与邮件服务器的连接安全
-    MAIL_FROM_NAME=settings.MAIL_FROM_NAME
-)
-
+# 获取一个日志记录器实例
+logger = logging.getLogger(__name__)
 
 async def send_email(subject: str, recipients: list[EmailStr], html_body: str):
     """
-    通用的邮件发送函数。
+    通用的邮件发送函数，使用 smtplib 实现。
     """
-    message = MessageSchema(
-        subject=subject,
-        recipients=recipients,
-        body=html_body,
-        subtype=MessageType.html
-    )
+    # 从配置中获取邮件服务器信息
+    settings = get_settings()
+    smtp_server = settings.MAIL_SERVER
+    port = settings.MAIL_PORT
+    username = settings.MAIL_USERNAME
+    password = settings.MAIL_PASSWORD
+    sender_email = settings.MAIL_FROM
 
-    fm = FastMail(mail_conf)
+    # 创建 EmailMessage 对象
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = f"{settings.MAIL_FROM_NAME} <{sender_email}>"
+    msg['To'] = ", ".join(recipients)
+    # 设置邮件内容为 HTML 格式
+    msg.add_header('Content-Type', 'text/html')
+    msg.set_payload(html_body, 'utf-8')
+
     try:
-        await fm.send_message(message)
-        logging.info(f"邮件已发送至: {', '.join(recipients)}, 主题: {subject}")
+        if port == 465:
+            # 使用 SSL
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+                server.login(username, password)
+                server.send_message(msg)
+        elif port == 587:
+            # 使用 STARTTLS
+            with smtplib.SMTP(smtp_server, port) as server:
+                server.starttls()  # 升级到安全连接
+                server.login(username, password)
+                server.send_message(msg)
+        else:
+            logger.error(f"不支持的邮件端口: {port}。请使用 465 或 587。")
+            return
+
+        logger.info(f"邮件已成功发送至: {', '.join(recipients)}")
+
+    except smtplib.SMTPAuthenticationError:
+        logger.error("邮件发送失败: SMTP认证错误。请检查您的MAIL_USERNAME和MAIL_PASSWORD。")
+        raise  # 重新抛出异常，以便上层能感知到错误
     except Exception as e:
-        logging.error(f"邮件发送失败至: {', '.join(recipients)}, 主题: {subject}, 错误: {e}")
-        # 在实际应用中，这里可能需要更健壮的错误处理，例如将失败的邮件放入重试队列
+        logger.error(f"邮件发送时发生未知错误: {e}")
+        raise # 重新抛出异常
 
 
 async def send_verification_email(email_to: EmailStr, username: str, token: str):
     """
     发送包含验证链接的邮件给新注册用户。
+    (此函数内容保持不变，因为它调用的是通用的 send_email 函数)
     """
+    settings = get_settings()
     subject = f"{settings.MAIL_FROM_NAME} - 邮箱验证"
-    # 构建验证链接，指向前端的验证页面
     verification_url = f"{settings.PORTAL_FRONTEND_BASE_URL}/verify-email?token={token}"
 
     html_content = f"""
@@ -75,14 +94,13 @@ async def send_verification_email(email_to: EmailStr, username: str, token: str)
     await send_email(subject=subject, recipients=[email_to], html_body=html_content)
 
 
-# --- 新增：发送密码重置邮件的函数 ---
 async def send_password_reset_email(email_to: EmailStr, username: str, token: str):
     """
     发送包含密码重置链接的邮件。
+    (此函数内容也保持不变)
     """
+    settings = get_settings()
     subject = f"{settings.MAIL_FROM_NAME} - 密码重置请求"
-    # 构建密码重置链接，它应该指向前端的一个页面，该页面接收令牌并允许用户输入新密码
-    # 例如：http://yourfrontend.com/reset-password?token=xxxxxxx
     reset_url = f"{settings.PORTAL_FRONTEND_BASE_URL}/reset-password?token={token}"
 
     html_content = f"""
