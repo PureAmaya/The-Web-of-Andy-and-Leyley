@@ -1,4 +1,6 @@
-﻿pydantic-settings~=2.6.1
+﻿# 限制 NumPy 版本以兼容旧版 OpenCV
+numpy<2.0
+pydantic-settings~=2.6.1
 pydantic~=2.11.5
 uvicorn~=0.32.1
 fastapi~=0.115.12
