@@ -24,6 +24,7 @@ psycopg2-binary~=2.9.9
 # --- Authentication & Security ---
 # For password hashing and verification
 passlib[bcrypt]~=1.7.4
+bcrypt==3.2.0
 # For handling JSON Web Tokens (JWT)
 python-jose[cryptography]~=3.3.0
 # For generating and verifying time-sensitive tokens (e.g., email verification)
