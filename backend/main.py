@@ -16,6 +16,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Fi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqladmin import Admin
 from sqlmodel import SQLModel  # 确保导入 SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -92,6 +93,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
+class PublicConfig(BaseModel):
+    enable_registration: bool
+    project_name: str
+
 # --- Admin Panel Setup ---
 admin = Admin(app, sync_engine, authentication_backend=authentication_backend)
 
@@ -128,6 +134,14 @@ async def read_root():
     return {"message": f"欢迎来到 {settings.MAIL_FROM_NAME} API"}
 
 
+@app.get("/config/public", response_model=PublicConfig, tags=["Public"])
+async def get_public_config():
+    """获取前端需要的、公开的后端配置信息。"""
+    return PublicConfig(
+        enable_registration=settings.ENABLE_REGISTRATION,
+        project_name=settings.MAIL_FROM_NAME
+    )
+
 # --- 新增：Minecraft 头像代理接口 ---
 # 把它放在其他路由定义之前
 @app.get("/avatars/mc/{username}", tags=["Public"])
@@ -163,6 +177,13 @@ async def register_user(
         background_tasks: BackgroundTasks,
         session: AsyncSession = Depends(get_async_session)
 ):
+    if not settings.ENABLE_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="用户注册功能当前已关闭"
+        )
+
+
     if await crud.get_user_by_email(db=session, email=user_create.email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已被注册")
     if await crud.get_user_by_username(db=session, username=user_create.username):

@@ -25,7 +25,7 @@ if ENV_PATH.exists():
 # --- 结束调试打印 ---
 
 class Settings(BaseSettings):
-    # 邮件配置 (保持不变)
+    # 邮件配置
     MAIL_USERNAME: EmailStr = "your_email_username@example.com"
     MAIL_PASSWORD: str = "your_super_secret_email_password"
     MAIL_FROM: EmailStr = "noreply@example.com"
@@ -35,32 +35,35 @@ class Settings(BaseSettings):
     MAIL_SSL_TLS: bool = False
     MAIL_FROM_NAME: str = "我的门户网站"
 
-    # 邮件验证令牌相关 (保持不变)
+    # 邮件验证令牌相关
     EMAIL_VERIFICATION_SECRET_KEY: str
     EMAIL_VERIFICATION_SALT: str
     EMAIL_TOKEN_MAX_AGE_SECONDS: int = 3600
 
-    # 门户网站前端基础 URL (保持不变)
+    # 门户网站前端基础 URL
     PORTAL_FRONTEND_BASE_URL: str = "http://localhost:5173"
 
-    # 密码重置令牌配置 (保持不变)
+    # 密码重置令牌配置
     PASSWORD_RESET_SECRET_KEY: str
     PASSWORD_RESET_SALT: str
     PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS: int = 900
 
-    # JWT 密钥 (保持不变)
+    # JWT 密钥
     JWT_SECRET_KEY: str
     JWT_REFRESH_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # --- 新增/修改：PostgreSQL 配置 ---
+    # --- PostgreSQL 配置 ---
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_SERVER: str
     POSTGRES_PORT: str = "5432"
     POSTGRES_DB: str
+
+    # 开放注册
+    ENABLE_REGISTRATION: bool = True  # 默认为开启
 
     # 使用 @property 来动态构建数据库 URL
     _ASYNC_DATABASE_URL: Optional[str] = None

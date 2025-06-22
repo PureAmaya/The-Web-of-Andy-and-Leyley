@@ -214,14 +214,6 @@ async function handleRegister() {
   box-sizing: border-box;
 }
 
-.register-form {
-  max-width: 480px; /* 注册表单可能内容更多，稍微宽一点 */
-  width: 100%;
-  padding: 30px 35px;
-  background-color: var(--secondary-bg-color);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 0 15px rgba(175, 214, 128, 0.3);
-}
 
 .register-form h2 {
   text-align: center;
@@ -232,26 +224,29 @@ async function handleRegister() {
   /* font-family: var(--font-pixel, var(--font-main)); */
 }
 
+ .register-form {
+    background-color: var(--main-bg-color); /* 使用主背景色，使其与内容区融为一体 */
+    border: 2px solid var(--border-color);
+    box-shadow: none; /* 移除阴影 */
+    padding: 2rem;
+}
+
+.form-group label {
+    font-family: var(--font-special), cursive; /* 标签使用特殊字体 */
+    color: var(--link-color);
+}
+
+.form-group input, .form-group textarea {
+    background-color: rgba(0,0,0,0.2); /* 输入框有半透明的深色背景 */
+    font-family: var(--font-main); /* 输入内容使用正文字体 */
+    border-color: var(--border-color);
+}
+
+
 .form-group {
   margin-bottom: 20px; /* 注册表单字段多，间距可以稍小 */
 }
 
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: normal;
-  color: var(--main-text-color);
-  font-size: 0.95em;
-}
-
-/* 输入框和文本域样式主要继承自 main.css */
-.form-group input,
-.form-group textarea {
-  padding: 12px 10px; /* 确保与登录页一致 */
-}
-.form-group textarea {
-    min-height: 80px; /* 给文本域一个最小高度 */
-}
 
 /* 按钮样式主要继承自 main.css */
 .form-button {

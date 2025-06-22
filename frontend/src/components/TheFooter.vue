@@ -14,7 +14,9 @@
       </div>
 
       <div class="copyright-section">
-        <p>Copyright © {{ new Date().getFullYear() }} {{ settingsStore.siteName }}. All Rights Reserved.</p>
+        <!-- 使用 computed property 来动态生成版权信息 -->
+        <p>{{ copyrightText }}</p>
+
         <p class="beian-info" v-if="settingsStore.beian.icp">
           <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">{{ settingsStore.beian.icp }}</a>
           <template v-if="settingsStore.beian.gongan && settingsStore.beian.gongan.text">
@@ -30,11 +32,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // 引入 computed
 import { useSettingsStore } from '@/stores/settings';
 
 const settingsStore = useSettingsStore();
 const links = ref([]);
+
+// --- 新增：使用计算属性动态生成版权字符串 ---
+const copyrightText = computed(() => {
+  const owner = settingsStore.footer.copyrightOwner || 'Your Name';
+  const startYear = settingsStore.footer.startYear;
+  const currentYear = new Date().getFullYear();
+
+  if (!startYear || startYear >= currentYear) {
+    return `Copyright © ${currentYear} ${owner}. All Rights Reserved.`;
+  }
+  return `Copyright © ${startYear}-${currentYear} ${owner}. All Rights Reserved.`;
+});
 
 async function fetchFriendLinks() {
   try {
@@ -48,7 +62,6 @@ async function fetchFriendLinks() {
 }
 
 function onLogoError(event) {
-  // 当Logo图片加载失败时，隐藏它以避免显示一个损坏的图片图标
   event.target.style.display = 'none';
 }
 
@@ -57,19 +70,23 @@ onMounted(() => {
 });
 </script>
 
+
 <style scoped>
 .site-footer {
-  background-color: #1a1a1a; /* 比主背景色更深 */
-  color: var(--secondary-text-color);
-  padding: 30px 40px;
+  background-color: var(--secondary-bg-color); /* 使用主题变量 */
+  color: var(--link-color); /* 使用主题变量 */
+  padding: 30px 0; /* 移除左右padding */
   border-top: 2px solid var(--border-color);
-  margin-top: auto; /* 关键：使其在内容不足时也能推到底部 */
+  margin-top: auto;
 }
 
 .footer-content {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
+  padding: 0 2rem; /* 在内容区内部添加padding */
+  box-sizing: border-box;
 }
+
 
 .footer-title {
   color: #e0e0e0;
@@ -102,6 +119,7 @@ onMounted(() => {
   transition: color 0.2s ease;
   padding: 5px;
 }
+
 .links-list li a:hover {
   color: var(--link-hover-color);
 }
@@ -117,7 +135,6 @@ onMounted(() => {
   font-size: 0.85em;
   color: #888;
   padding-top: 20px;
-  border-top: 1px solid #333;
 }
 
 .copyright-section p {
@@ -128,10 +145,12 @@ onMounted(() => {
   color: #888;
   text-decoration: none;
 }
+
 .beian-info a:hover {
   text-decoration: underline;
   color: #aaa;
 }
+
 .beian-info .separator {
   margin: 0 10px;
 }

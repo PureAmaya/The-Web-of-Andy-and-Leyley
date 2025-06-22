@@ -1,15 +1,14 @@
 # alembic/env.py
-from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
-from alembic import context
-
 # --- 新增部分开始 ---
 # 解决 Alembic 无法找到模块的问题
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
 # 将项目根目录添加到 sys.path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -18,7 +17,6 @@ from backend.models import SQLModel # 导入 SQLModel 基类
 
 # 从 backend.models 中导入所有模型，确保 Alembic 能检测到它们
 # !!! 确保这里导入了所有定义了 table=True 的模型 !!!
-from backend import models 
 # --- 新增部分结束 ---
 
 

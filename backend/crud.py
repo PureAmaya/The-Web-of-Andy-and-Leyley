@@ -3,7 +3,8 @@
 import datetime
 from typing import List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, desc
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -196,7 +197,7 @@ async def get_paginated_gallery_items(db: AsyncSession, page: int, page_size: in
             selectinload(models.GalleryItem.builder),  # 预先加载 builder
             selectinload(models.GalleryItem.uploader)  # 预先加载 uploader
         )
-        .order_by(models.GalleryItem.uploaded_at.desc())
+        .order_by(desc(models.GalleryItem.uploaded_at))
         .offset(offset)
         .limit(page_size)
     )

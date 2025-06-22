@@ -17,7 +17,9 @@
         <p v-if="error" class="message error">{{ error }}</p>
       </form>
       <div class="form-links">
-        <RouterLink to="/register">还没有账户？立即注册</RouterLink>
+        <RouterLink v-if="settingsStore.isRegistrationEnabled" to="/register">
+          还没有账户？立即注册
+        </RouterLink>
         <br/>
         <RouterLink to="/request-password-reset">忘记密码？</RouterLink>
       </div>
@@ -28,7 +30,8 @@
 <script setup>
 import {ref} from 'vue';
 
-import { useSettingsStore } from '@/stores/settings';
+import {useSettingsStore} from '@/stores/settings';
+
 const settingsStore = useSettingsStore();
 
 import {useRouter, RouterLink} from 'vue-router';
@@ -94,15 +97,7 @@ async function handleLogin() {
   box-sizing: border-box;
 }
 
-.login-form {
-  max-width: 380px; /* 调整宽度 */
-  width: 100%;
-  padding: 30px 35px; /* 调整内边距 */
-  background-color: var(--secondary-bg-color); /* 使用次级背景色 */
-  border: 1px solid var(--border-color);
-  box-shadow: 0 0 15px rgba(226, 138, 162, 0.3); /* 尝试用强调色做阴影，可选 */
-  /* 设计风格参考：可以考虑使用类似游戏UI的边框图片或更粗糙的边框 */
-}
+
 
 .login-form h2 {
   text-align: center;
@@ -113,24 +108,31 @@ async function handleLogin() {
   /* font-family: var(--font-pixel, var(--font-main)); /* 标题可以尝试特定字体 */
 }
 
+
+.login-form {
+    background-color: var(--main-bg-color); /* 使用主背景色，使其与内容区融为一体 */
+    border: 2px solid var(--border-color);
+    box-shadow: none; /* 移除阴影 */
+    padding: 2rem;
+}
+
+.form-group label {
+    font-family: var(--font-special), cursive; /* 标签使用特殊字体 */
+    color: var(--link-color);
+}
+
+.form-group input, .form-group textarea {
+    background-color: rgba(0,0,0,0.2); /* 输入框有半透明的深色背景 */
+    font-family: var(--font-main); /* 输入内容使用正文字体 */
+    border-color: var(--border-color);
+}
+
+
 .form-group {
   margin-bottom: 25px; /* 增加组间距 */
 }
 
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: normal; /* 调整字重 */
-  color: var(--main-text-color);
-  font-size: 0.95em;
-}
 
-/* 输入框样式主要继承自 main.css，这里可以进行微调 */
-.form-group input {
-  /* 如果 main.css 中定义的样式已满足，这里可以留空或只写差异部分 */
-  /* 例如，确保高度和字体与设计一致 */
-  padding: 12px 10px;
-}
 
 
 /* 按钮样式主要继承自 main.css */

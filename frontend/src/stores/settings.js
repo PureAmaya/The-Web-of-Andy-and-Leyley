@@ -1,5 +1,6 @@
-﻿import { defineStore } from 'pinia';
-import { ref } from 'vue';
+﻿import {defineStore} from 'pinia';
+import {ref} from 'vue';
+import apiClient from "@/api.js";
 
 // 定义两套颜色主题的变量值
 const lightThemeColors = { // 复古/羊皮纸风格
@@ -11,6 +12,7 @@ const lightThemeColors = { // 复古/羊皮纸风格
     '--link-hover-color': '#8c4343',     // 链接悬停时使用强调色
     '--primary-accent-color': '#8c4343', // 不饱和的暗红色作为强调色
     '--button-text-color': '#f4f1e9',    // 按钮文字用浅色
+    '--secondary-accent-color': '#38761d',
 };
 
 const darkThemeColors = {
@@ -22,6 +24,7 @@ const darkThemeColors = {
     '--link-hover-color': '#FFFFFF',     // 链接悬停 - 纯白
     '--primary-accent-color': '#B71C1C', // 保持一个深邃的红色作为强调色 (例如，Material Design的深红色)
     '--button-text-color': '#FFFFFF',
+    '--secondary-accent-color': '#38761d',
 };
 
 
@@ -36,6 +39,9 @@ export const useSettingsStore = defineStore('settings', () => {
     const availableThemes = ['light', 'dark', 'system'];
     const theme = ref(localStorage.getItem('theme_preference') || 'system');
     const currentAppliedTheme = ref('light');
+    const isRegistrationEnabled = ref(true);
+    const heroSection = ref({});
+    const footer = ref({});
 
     // --- Actions ---
 
@@ -83,11 +89,20 @@ export const useSettingsStore = defineStore('settings', () => {
             if (!response.ok) throw new Error("Config not found");
             const config = await response.json();
 
+            // --- 获取后端的公共配置 ---
+            const publicConfig = await apiClient.get('/config/public');
+            isRegistrationEnabled.value = publicConfig.enable_registration;
+
             // 注意这里的逻辑：环境变量提供了初始值，但 site-config.json 中的值可以覆盖它
             // 这提供了双重灵活性
             apiBaseUrl.value = config.apiBaseUrl || apiBaseUrl.value;
             contactInfo.value = config.contactInfo || {};
             beian.value = config.beian || {};
+            heroSection.value = config.heroSection || {
+                title: '安迪与莉莉的Minecraft',
+                subtitle: '一个存放记忆与创造的角落'
+            };
+            footer.value = config.footer || {};
 
         } catch (error) {
             console.error('无法加载站点配置 (site-config.json):', error);
@@ -102,10 +117,13 @@ export const useSettingsStore = defineStore('settings', () => {
         apiBaseUrl,
         contactInfo,
         beian,
+        footer,
+        heroSection,
+        isRegistrationEnabled,
         theme,
         currentAppliedTheme,
         availableThemes,
-        initialize, // 导出初始化函数
+        initialize,
         setTheme,
     };
 });

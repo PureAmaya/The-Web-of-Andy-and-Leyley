@@ -5,7 +5,7 @@
       <form @submit.prevent="handleFileUpload">
         <div class="form-group">
           <label for="title">作品标题:</label>
-          <input type="text" id="title" v-model="title" required />
+          <input type="text" id="title" v-model="title" required/>
         </div>
 
         <div class="form-group">
@@ -15,7 +15,7 @@
 
         <div class="form-group">
           <label for="builder-name">创作者 (成员名称):</label>
-          <input type="text" id="builder-name" v-model="builderName" required list="members-list" autocomplete="off" />
+          <input type="text" id="builder-name" v-model="builderName" required list="members-list" autocomplete="off"/>
           <datalist id="members-list">
             <option v-for="member in existingMembers" :key="member.id" :value="member.name"></option>
           </datalist>
@@ -23,10 +23,11 @@
 
         <div class="form-group">
           <label for="image-file">选择图片文件:</label>
-          <input type="file" id="image-file" @change="onFileSelected" accept="image/jpeg, image/png, image/gif" required />
+          <input type="file" id="image-file" @change="onFileSelected" accept="image/jpeg, image/png, image/gif"
+                 required/>
           <div v-if="filePreviewUrl" class="image-preview-container">
             <p>图片预览:</p>
-            <img :src="filePreviewUrl" alt="图片预览" class="image-preview" />
+            <img :src="filePreviewUrl" alt="图片预览" class="image-preview"/>
           </div>
           <p v-if="fileError" class="validation-error">{{ fileError }}</p>
         </div>
@@ -42,10 +43,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'; // 确保导入 onMounted
-import { useAuthStore } from '@/stores/auth';
-import { useSettingsStore } from '@/stores/settings';
-import { useRouter } from 'vue-router';
+import {ref, onMounted} from 'vue'; // 确保导入 onMounted
+import {useAuthStore} from '@/stores/auth';
+import {useSettingsStore} from '@/stores/settings';
+import {useRouter} from 'vue-router';
 
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
@@ -123,7 +124,7 @@ async function handleFileUpload() {
   if (!authStore.isLoggedIn || !authStore.accessToken) {
     uploadMessage.value = '请先登录后再上传作品。';
     uploadStatus.value = 'error';
-    router.push({ name: 'login', query: { redirect: '/upload' }});
+    router.push({name: 'login', query: {redirect: '/upload'}});
     return;
   }
 
@@ -186,14 +187,6 @@ async function handleFileUpload() {
   box-sizing: border-box;
 }
 
-.upload-form-container {
-  max-width: 550px; /* 上传表单可以更宽一些 */
-  width: 100%;
-  padding: 30px 35px;
-  background-color: var(--secondary-bg-color);
-  border: 1px solid var(--border-color);
-  /* box-shadow: var(--game-box-shadow); */ /* 游戏风格阴影 */
-}
 
 .upload-form-container h2 {
   text-align: center;
@@ -204,28 +197,27 @@ async function handleFileUpload() {
   /* font-family: var(--font-pixel, var(--font-main)); */
 }
 
-.form-group {
-  margin-bottom: 20px;
+.upload-form-container {
+  background-color: var(--main-bg-color); /* 使用主背景色，使其与内容区融为一体 */
+  border: 2px solid var(--border-color);
+  box-shadow: none; /* 移除阴影 */
+  padding: 2rem;
 }
 
 .form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: normal;
-  color: var(--main-text-color);
-  font-size: 0.95em;
+  font-family: var(--font-special), cursive; /* 标签使用特殊字体 */
+  color: var(--link-color);
 }
 
-.form-group input[type="text"],
-.form-group textarea,
-.form-group input[type="file"] {
-  /* 继承自 main.css 的基础样式 */
-  /* 这里可以添加特定于文件输入的样式 */
-  margin-top: 4px; /* 文件输入框可能需要一点上边距 */
+.form-group input, .form-group textarea {
+  background-color: rgba(0, 0, 0, 0.2); /* 输入框有半透明的深色背景 */
+  font-family: var(--font-main); /* 输入内容使用正文字体 */
+  border-color: var(--border-color);
 }
-.form-group input[type="file"] {
-    padding: 8px; /* 文件输入框的padding可能和其他输入框不同 */
-    /* 为了风格统一，可以考虑自定义文件输入框样式，这通常比较复杂 */
+
+
+.form-group {
+  margin-bottom: 20px;
 }
 
 
@@ -235,11 +227,13 @@ async function handleFileUpload() {
   padding: 10px;
   text-align: center;
 }
+
 .image-preview-container p {
-    margin-bottom: 10px;
-    font-size: 0.9em;
-    color: var(--main-text-color);
+  margin-bottom: 10px;
+  font-size: 0.9em;
+  color: var(--main-text-color);
 }
+
 .image-preview {
   max-width: 100%;
   max-height: 250px; /* 限制预览图高度 */
@@ -255,15 +249,17 @@ async function handleFileUpload() {
   border-color: #600000;
   color: var(--button-text-color);
 }
+
 .form-button:hover:not(:disabled) {
   background-color: #600000;
   border-color: #400000;
 }
 
 .validation-error {
-    color: var(--primary-accent-color);
-    font-size: 0.85em;
-    margin-top: 5px;
+  color: var(--primary-accent-color);
+  font-size: 0.85em;
+  margin-top: 5px;
 }
+
 /* message 样式继承自 main.css */
 </style>

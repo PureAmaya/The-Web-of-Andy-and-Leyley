@@ -158,6 +158,26 @@ onMounted(() => {
   transition: all 0.3s ease;
   cursor: pointer;
 }
+
+/* 为奇数和偶数项应用不同的、轻微的旋转角度 */
+.gallery-item:nth-child(odd) {
+  transform: rotate(-2deg);
+}
+.gallery-item:nth-child(even) {
+  transform: rotate(2deg);
+}
+.gallery-item:nth-child(3n) {
+  transform: rotate(1deg);
+}
+
+/* 鼠标悬浮时，图片回正并放大 */
+.gallery-item:hover {
+  transform: rotate(0deg) scale(1.1);
+  z-index: 10; /* 确保它在最上层显示 */
+  border-color: var(--primary-accent-color);
+}
+
+
 .gallery-item:focus {
   outline: 2px solid var(--primary-accent-color);
   outline-offset: 2px;
