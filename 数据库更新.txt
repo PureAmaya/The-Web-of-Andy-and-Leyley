@@ -1,4 +1,0 @@
-﻿每当您修改 models.py （例如添加/删除字段或表）时，只需重复第 4 步和第 5 步即可：
-
-alembic revision --autogenerate -m "一个描述你做了什么修改的消息"
-alembic upgrade head

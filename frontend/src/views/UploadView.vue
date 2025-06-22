@@ -22,10 +22,12 @@
         </div>
 
         <div class="form-group">
-          <label for="image-file">选择图片文件:</label>
-          <input type="file" id="image-file" @change="onFileSelected" accept="image/jpeg, image/png, image/gif"
+          <label for="image-file">选择图片或视频文件:</label>
+          <input type="file" id="image-file" @change="onFileSelected"
+                 accept="image/jpeg, image/png, image/gif, video/mp4"
                  required/>
-          <div v-if="filePreviewUrl" class="image-preview-container">
+          <div v-if="filePreviewUrl && selectedFile && selectedFile.type.startsWith('image/')"
+               class="image-preview-container">
             <p>图片预览:</p>
             <img :src="filePreviewUrl" alt="图片预览" class="image-preview"/>
           </div>
@@ -43,7 +45,7 @@
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'; // 确保导入 onMounted
+import {ref, onMounted} from 'vue';
 import {useAuthStore} from '@/stores/auth';
 import {useSettingsStore} from '@/stores/settings';
 import {useRouter} from 'vue-router';
@@ -54,24 +56,25 @@ const router = useRouter();
 
 const title = ref('');
 const description = ref('');
-const builderName = ref(''); // 新增：创作者名称
-const existingMembers = ref([]); // 新增：用于存放成员列表
+const builderName = ref('');
+const existingMembers = ref([]);
 const selectedFile = ref(null);
 const filePreviewUrl = ref('');
-const fileError = ref('');
+const fileError = ref(''); // 这个 ref 仍然有用，用于显示后端返回的错误
 
 const isLoading = ref(false);
 const uploadMessage = ref('');
 const uploadStatus = ref(''); // 'success' or 'error'
 
-const MAX_FILE_SIZE_MB = 5; // 与后端配置一致
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif"]; // 与后端配置一致
+// --- 移除了客户端验证常量 ---
+// const MAX_FILE_SIZE_MB = 50;
+// const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+// const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "video/mp4"];
 
-// 组件挂载时获取成员列表，为创作者输入框提供建议
+// 组件挂载时获取成员列表
 onMounted(async () => {
   try {
-    const response = await fetch(`${settingsStore.apiBaseUrl}/members`); // 调用获取所有成员的接口
+    const response = await fetch(`${settingsStore.apiBaseUrl}/members`);
     if (response.ok) {
       existingMembers.value = await response.json();
     } else {
@@ -82,9 +85,10 @@ onMounted(async () => {
   }
 });
 
-
+// --- 更新 onFileSelected 函数 ---
 function onFileSelected(event) {
   const file = event.target.files[0];
+  // 重置状态
   fileError.value = '';
   filePreviewUrl.value = '';
   selectedFile.value = null;
@@ -93,33 +97,31 @@ function onFileSelected(event) {
     return;
   }
 
-  // 客户端文件类型校验
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    fileError.value = `不支持的文件类型。请上传 JPG, PNG, 或 GIF 格式的图片。`;
-    return;
-  }
-
-  // 客户端文件大小校验
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    fileError.value = `文件过大，最大允许 ${MAX_FILE_SIZE_MB}MB。`;
-    return;
-  }
+  // --- 这里移除了所有的客户端验证逻辑 ---
 
   selectedFile.value = file;
 
-  // 生成本地预览 URL
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    filePreviewUrl.value = e.target.result;
-  };
-  reader.readAsDataURL(file);
+  // 如果是图片，仍然可以生成本地预览
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      filePreviewUrl.value = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
 }
 
 async function handleFileUpload() {
-  if (!selectedFile.value || fileError.value || !builderName.value) {
-    uploadMessage.value = '请选择有效的文件并填写所有必填信息。';
+  // 这部分的文件检查现在只检查是否已选择文件
+  if (!selectedFile.value) {
+    uploadMessage.value = '请选择一个文件。';
     uploadStatus.value = 'error';
     return;
+  }
+  if (!builderName.value.trim()) {
+      uploadMessage.value = '请填写创作者名称。';
+      uploadStatus.value = 'error';
+      return;
   }
   if (!authStore.isLoggedIn || !authStore.accessToken) {
     uploadMessage.value = '请先登录后再上传作品。';
@@ -131,14 +133,15 @@ async function handleFileUpload() {
   isLoading.value = true;
   uploadMessage.value = '';
   uploadStatus.value = '';
+  fileError.value = ''; // 清除旧的错误
 
   const formData = new FormData();
   formData.append('title', title.value);
-  formData.append('builder_name', builderName.value); // 添加创作者名称
+  formData.append('builder_name', builderName.value);
   if (description.value) {
     formData.append('description', description.value);
   }
-  formData.append('image', selectedFile.value); // 'image' 对应后端 UploadFile 的参数名
+  formData.append('image', selectedFile.value);
 
   try {
     const response = await fetch(`${settingsStore.apiBaseUrl}/gallery/upload`, {
@@ -151,7 +154,7 @@ async function handleFileUpload() {
 
     const data = await response.json();
 
-    if (response.ok) { // HTTP 201 Created
+    if (response.ok) {
       uploadMessage.value = `作品 "${data.title}" 上传成功！`;
       uploadStatus.value = 'success';
       // 清空表单
@@ -163,6 +166,7 @@ async function handleFileUpload() {
       document.getElementById('image-file').value = null;
 
     } else {
+      // 将后端返回的验证错误信息显示出来
       uploadMessage.value = data.detail || '上传失败，请重试。';
       uploadStatus.value = 'error';
     }

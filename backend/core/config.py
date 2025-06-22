@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     MAIL_SERVER: str = "smtp.example.com"
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
-    MAIL_FROM_NAME: str = "我的门户网站"
+    MAIL_FROM_NAME: str = "安迪和莉莉的网站"
 
     # 邮件验证令牌相关
     EMAIL_VERIFICATION_SECRET_KEY: str
@@ -65,9 +65,26 @@ class Settings(BaseSettings):
     # 开放注册
     ENABLE_REGISTRATION: bool = True  # 默认为开启
 
+    #其他的一些配置
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173"
+    UPLOAD_ALLOWED_MIME_TYPES: str = "image/jpeg,image/png,image/gif,video/mp4"
+    UPLOAD_MAX_SIZE_MB: int = 50
+    GALLERY_DEFAULT_PAGE_SIZE: int = 12
+    GALLERY_MAX_PAGE_SIZE: int = 100
+    MC_AVATAR_URL_TEMPLATE: str = "https://cravatar.eu/avatar/{username}/128.png"
+
+
     # 使用 @property 来动态构建数据库 URL
     _ASYNC_DATABASE_URL: Optional[str] = None
     _SYNC_DATABASE_URL: Optional[str] = None
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(',')]
+
+    @property
+    def allowed_mime_types_list(self) -> List[str]:
+        return [mime_type.strip() for mime_type in self.UPLOAD_ALLOWED_MIME_TYPES.split(',')]
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
@@ -89,10 +106,21 @@ class Settings(BaseSettings):
     )
 
 
-try:
-    settings = Settings()
-    print("DEBUG: [config.py] Settings object created successfully.")
-    print(f"DEBUG: [config.py] Loaded POSTGRES_USER from settings: {settings.POSTGRES_USER}")
-except Exception as e:
-    print(f"DEBUG: [config.py] Error creating Settings instance: {e}")
-    raise # 重新抛出异常，以便看到原始的 Pydantic 错误
+_cached_settings: Optional[Settings] = None
+
+def get_settings() -> Settings:
+    """
+    获取配置对象的函数，使用了缓存以提高性能。
+    这是实现动态重载的关键。
+    """
+    global _cached_settings
+    if _cached_settings is None:
+        _cached_settings = Settings()
+        print("DEBUG: [config.py] Settings object (re)loaded.")
+    return _cached_settings
+
+def clear_settings_cache():
+    """清除配置缓存，以便下次调用 get_settings 时重新加载。"""
+    global _cached_settings
+    _cached_settings = None
+    print("DEBUG: [config.py] Settings cache cleared.")

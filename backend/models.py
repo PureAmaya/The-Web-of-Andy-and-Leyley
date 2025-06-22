@@ -287,11 +287,16 @@ class MemberUpdate(SQLModel):
 
 # --- 画廊项目模型 ---
 
+class ItemType(str, enum.Enum):
+    IMAGE = "image"
+    VIDEO = "video"
+
 class GalleryItemBase(SQLModel):
     title: str = Field(index=True, description="作品标题")
     description: Optional[str] = Field(default=None, description="作品描述")
     image_url: str = Field(description="图片展示URL")
     thumbnail_url: Optional[str] = Field(default=None, description="缩略图URL")
+    item_type: ItemType = Field(default=ItemType.IMAGE, nullable=False, description="项目类型")
 
 
 class GalleryItem(GalleryItemBase, table=True):

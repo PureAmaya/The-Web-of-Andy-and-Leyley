@@ -1,0 +1,9 @@
+﻿每当您修改 models.py （例如添加/删除字段或表）时，只需重复第 4 步和第 5 步即可：
+
+alembic revision --autogenerate -m "一个描述你做了什么修改的消息"
+alembic upgrade head
+
+
+如何使用动态重载
+触发重载: 使用管理员账户的凭据，向 /admin/reload-config 端点发送一个POST请求。您可以使用 Postman、curl 或前端的一个管理员按钮来完成。
+curl -X POST "http://127.0.0.1:8000/admin/reload-config" -H "Authorization: Bearer <你的管理员JWT>"

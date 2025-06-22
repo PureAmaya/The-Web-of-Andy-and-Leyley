@@ -19,10 +19,23 @@
           :aria-label="`查看作品 ${item.title}`"
         >
           <img
-            :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/400x300.png?text=Image+Not+Found'"
+            v-if="item.item_type === 'image'"
+            :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/400x300.png?text=Image'"
             :alt="item.title"
-            class="gallery-image"
+            class="gallery-media"
           />
+          <video
+            v-else-if="item.item_type === 'video'"
+            :poster="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : ''"
+            class="gallery-media"
+            muted
+            preload="metadata"
+          >
+            <source :src="`${settingsStore.apiBaseUrl}${item.image_url}`" type="video/mp4">
+            您的浏览器不支持 Video 标签。
+          </video>
+          <div v-if="item.item_type === 'video'" class="video-play-icon">▶</div>
+
           <div class="item-title-bar">
             <h3 class="item-title">{{ item.title }}</h3>
           </div>
@@ -53,10 +66,22 @@
     <div v-if="selectedItemForLightbox" class="lightbox-overlay" @click.self="closeLightbox">
       <div class="lightbox-content">
         <img
+          v-if="selectedItemForLightbox.item_type === 'image'"
           :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
           :alt="selectedItemForLightbox.title"
-          class="lightbox-image"
+          class="lightbox-media"
         />
+        <video
+          v-else-if="selectedItemForLightbox.item_type === 'video'"
+          :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
+          class="lightbox-media"
+          controls
+          autoplay
+          loop
+        >
+          您的浏览器不支持 Video 标签。
+        </video>
+
         <div class="lightbox-details">
             <h2>{{ selectedItemForLightbox.title }}</h2>
             <p v-if="selectedItemForLightbox.description" class="lightbox-description">
@@ -72,12 +97,12 @@
             </div>
             <a
               :href="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
-              :download="`${selectedItemForLightbox.title}.png`"
+              :download="getDownloadFilename(selectedItemForLightbox)"
               class="download-button"
               target="_blank"
               rel="noopener noreferrer"
             >
-              下载原图
+              下载原文件
             </a>
         </div>
         <button @click="closeLightbox" class="close-button" aria-label="关闭">&times;</button>
@@ -135,6 +160,13 @@ function closeLightbox() {
   selectedItemForLightbox.value = null;
 }
 
+const getDownloadFilename = (item) => {
+  if (!item || !item.image_url) return 'download';
+  // 从 image_url 中提取文件扩展名
+  const extension = item.image_url.split('.').pop();
+  return `${item.title}.${extension}`;
+};
+
 onMounted(() => {
   fetchGalleryItems(currentPage.value, pageSize.value);
 });
@@ -183,11 +215,29 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
-.gallery-image {
+.gallery-media {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.4s ease;
+}
+
+/* 视频播放按钮图标样式 */
+.video-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 4rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  pointer-events: none; /* 确保它不影响点击事件 */
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+
+.gallery-item:hover .video-play-icon {
+  opacity: 1;
 }
 
 /* --- 新交互的核心样式 --- */
@@ -239,8 +289,8 @@ onMounted(() => {
 .gallery-item:hover .item-title-bar {
   opacity: 0; /* 隐藏默认标题栏 */
 }
-.gallery-item:hover .gallery-image {
-  transform: scale(1.05); /* 图片放大 */
+.gallery-item:hover .gallery-media {
+  transform: scale(1.05); /* 图片/视频放大 */
 }
 .item-title-hover {
   font-family: var(--font-special), cursive;
@@ -254,7 +304,7 @@ onMounted(() => {
 }
 
 
-/* 灯箱 (大图预览) - 样式与之前相同，但包含了新的下载按钮 */
+/* 灯箱 (大图预览) */
 .lightbox-overlay {
   position: fixed;
   top: 0;
@@ -285,15 +335,16 @@ onMounted(() => {
   .lightbox-content { flex-direction: row; max-width: 90vw; }
 }
 
-.lightbox-image {
+.lightbox-media {
   flex-shrink: 1;
   object-fit: contain;
   min-width: 0;
   min-height: 0;
   background-color: #000;
+  max-height: 90vh;
 }
 @media (min-width: 1024px) {
-  .lightbox-image { border-right: 2px solid var(--border-color); }
+  .lightbox-media { border-right: 2px solid var(--border-color); }
 }
 
 .lightbox-details {
@@ -332,7 +383,7 @@ onMounted(() => {
 
 /* 下载按钮样式 */
 .download-button {
-  display: block; /* 改为块级元素，占满整行 */
+  display: block;
   width: 100%;
   padding: 12px 20px;
   box-sizing: border-box;

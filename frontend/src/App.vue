@@ -11,7 +11,13 @@
         <nav class="main-nav">
           <RouterLink to="/gallery" class="nav-link">画廊</RouterLink>
           <RouterLink v-if="authStore.isLoggedIn" to="/upload" class="nav-link">上传作品</RouterLink>
-
+          <RouterLink
+              v-if="authStore.isLoggedIn && authStore.user?.role === 'admin'"
+              to="/admin-dashboard"
+              class="nav-link"
+          >
+            管理
+          </RouterLink>
           <template v-if="authStore.isLoggedIn">
             <RouterLink to="/profile" class="nav-link">
               {{ authStore.user?.username || '档案' }}
@@ -40,7 +46,7 @@
     <main class="app-content">
       <router-view v-slot="{ Component }">
         <transition name="glitch-fade" mode="out-in">
-          <component :is="Component" />
+          <component :is="Component"/>
         </transition>
       </router-view>
     </main>
@@ -51,11 +57,12 @@
 
 <script setup>
 // Script 部分与之前版本完全相同，无需修改
-import { RouterLink, RouterView, useRouter } from 'vue-router';
-import { onMounted, ref, watch } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { useSettingsStore } from '@/stores/settings';
+import {RouterLink, RouterView, useRouter} from 'vue-router';
+import {onMounted, ref, watch} from 'vue';
+import {useAuthStore} from '@/stores/auth';
+import {useSettingsStore} from '@/stores/settings';
 import TheFooter from '@/components/TheFooter.vue';
+
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
@@ -72,10 +79,12 @@ onMounted(async () => {
     await authStore.fetchAndSetUser();
   }
 });
+
 function handleLogout() {
   authStore.logout();
   router.push('/login');
 }
+
 function onThemeChange() {
   settingsStore.setTheme(selectedTheme.value);
 }
@@ -126,7 +135,7 @@ function onThemeChange() {
 }
 
 .logo a:hover .site-logo-icon {
-    transform: rotate(360deg);
+  transform: rotate(360deg);
 }
 
 .theme-switcher {
@@ -161,6 +170,7 @@ function onThemeChange() {
   font-family: var(--font-main);
   text-shadow: none;
 }
+
 .nav-link:hover, .nav-link.router-link-exact-active {
   color: var(--link-hover-color);
   text-shadow: 0 0 5px var(--primary-accent-color);
@@ -178,11 +188,13 @@ function onThemeChange() {
   font-family: var(--font-special), cursive;
   text-transform: none;
 }
+
 .nav-button.logout-button:hover {
   background-color: var(--primary-accent-color);
   border-color: var(--primary-accent-color);
   color: var(--button-text-color);
 }
+
 .theme-switcher select {
   background-color: var(--secondary-bg-color);
   color: var(--main-text-color);
@@ -192,8 +204,9 @@ function onThemeChange() {
   font-size: 0.9rem;
   cursor: pointer;
 }
+
 .theme-switcher select:focus {
-    outline: 2px solid var(--primary-accent-color);
+  outline: 2px solid var(--primary-accent-color);
 }
 
 
@@ -203,17 +216,32 @@ function onThemeChange() {
   transition: opacity 0.3s ease-in-out;
   position: relative;
 }
+
 .glitch-fade-enter-from,
 .glitch-fade-leave-to {
   opacity: 0;
 }
+
 .glitch-fade-enter-active {
   animation: glitch-in 0.3s steps(3) forwards;
 }
+
 @keyframes glitch-in {
-  0% { transform: translate(-1%,-2%); opacity: 0; }
-  25% { transform: translate(2%,1%); opacity: 0.25; }
-  50% { transform: translate(-2%, 2%); opacity: 0.75; }
-  100% { transform: translate(0, 0); opacity: 1; }
+  0% {
+    transform: translate(-1%, -2%);
+    opacity: 0;
+  }
+  25% {
+    transform: translate(2%, 1%);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate(-2%, 2%);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
 }
 </style>
