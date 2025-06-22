@@ -46,7 +46,9 @@
     <main class="app-content">
       <router-view v-slot="{ Component }">
         <transition name="glitch-fade" mode="out-in">
-          <component :is="Component"/>
+          <KeepAlive>
+            <component :is="Component"/>
+          </KeepAlive>
         </transition>
       </router-view>
     </main>

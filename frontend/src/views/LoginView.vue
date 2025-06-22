@@ -34,12 +34,13 @@ import {useSettingsStore} from '@/stores/settings';
 
 const settingsStore = useSettingsStore();
 
-import {useRouter, RouterLink} from 'vue-router';
-import {useAuthStore} from '@/stores/auth'; // 1. 导入 authStore
-
+// 【核心修改】从 'vue-router' 中导入 useRoute
+import {useRouter, RouterLink, useRoute} from 'vue-router'; // <--- 添加 useRoute
+import {useAuthStore} from '@/stores/auth';
 
 const router = useRouter();
-const authStore = useAuthStore(); // 2. 获取 authStore 实例
+const route = useRoute(); // <--- 正确定义 route 变量
+const authStore = useAuthStore();
 
 const identifier = ref('');
 const password = ref('');
@@ -69,11 +70,11 @@ async function handleLogin() {
       await authStore.login(data);
 
       // 检查 URL 中是否有 redirect 参数
-      const redirectPath = route.query.redirect;
+      const redirectPath = route.query.redirect; // 使用已定义的 route 变量
       if (redirectPath) {
-        await router.push(redirectPath); // 跳转到之前想访问的页面
+        await router.push(redirectPath);
       } else {
-        await router.push('/'); // 否则跳转到主页
+        await router.push('/');
       }
     } else {
       error.value = data.detail || '登录失败，请检查您的凭据。';
@@ -88,6 +89,7 @@ async function handleLogin() {
 </script>
 
 <style scoped>
+/* 样式保持不变，因为它们不是导致 ReferenceError 的原因 */
 .login-view {
   display: flex;
   justify-content: center;
