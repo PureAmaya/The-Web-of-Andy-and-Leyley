@@ -2,8 +2,9 @@
   <div class="home-container">
     <section class="hero-section">
       <div class="hero-content">
-        <h1 class="hero-title">{{ animatedTitle }}<span class="cursor" v-if="isTyping">_</span></h1>
-        <p class="hero-subtitle">{{ animatedSubtitle }}</p>
+        <!-- 核心修正：直接绑定配置中的标题和副标题，移除动画 -->
+        <h1 class="hero-title">{{ settingsStore.heroSection.title }}</h1>
+        <p class="hero-subtitle">{{ settingsStore.heroSection.subtitle }}</p>
       </div>
     </section>
 
@@ -67,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useSettingsStore } from '@/stores/settings';
 import apiClient from '@/api';
@@ -85,47 +86,8 @@ const galleryError = ref(null);
 const selectedMember = ref(null);
 const isModalOpen = ref(false);
 const selectedItemForLightbox = ref(null);
-const animatedTitle = ref('');
-const animatedSubtitle = ref('');
-const isTyping = ref(false);
-let animationStarted = false;
 
-function typeWriter(text, elementRef, speed) {
-  return new Promise((resolve) => {
-    let i = 0;
-    elementRef.value = '';
-    function typing() {
-      if (i < text.length) {
-        elementRef.value += text.charAt(i);
-        i++;
-        setTimeout(typing, speed);
-      } else {
-        resolve();
-      }
-    }
-    typing();
-  });
-}
-
-watch(
-  () => settingsStore.heroSection,
-  (newConfig) => {
-    if (newConfig && newConfig.title && !animationStarted) {
-      animationStarted = true;
-      isTyping.value = true;
-      typeWriter(newConfig.title, animatedTitle, 150)
-        .then(() => {
-          if (newConfig.subtitle) {
-            return typeWriter(newConfig.subtitle, animatedSubtitle, 50);
-          }
-        })
-        .finally(() => {
-          isTyping.value = false;
-        });
-    }
-  },
-  { deep: true }
-);
+// --- 移除了所有与打字机动画相关的 ref 和 watch ---
 
 onMounted(async () => {
   const fetchGallery = async () => {
@@ -199,22 +161,17 @@ function closeLightbox() {
   margin: 0;
   color: var(--main-text-color);
   font-family: var(--font-special), cursive;
-  min-height: 1.2em;
+  min-height: 1.2em; /* 防止加载时跳动 */
 }
 .hero-subtitle {
   font-size: clamp(1.2rem, 4vw, 1.5rem);
   margin-top: 1rem;
   color: var(--link-color);
-  min-height: 1.2em;
+  min-height: 1.2em; /* 防止加载时跳动 */
 }
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-.cursor {
-  animation: blink 1s step-end infinite;
-  font-weight: bold;
-}
+
+/* 移除了 .cursor 和 @keyframes blink 样式 */
+
 .gallery-preview .preview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
