@@ -125,3 +125,34 @@ async def send_password_reset_email(email_to: EmailStr, username: str, token: st
     </html>
     """
     await send_email(subject=subject, recipients=[email_to], html_body=html_content)
+
+
+async def send_account_deletion_email(email_to: EmailStr, username: str):
+    """
+    发送账户已被管理员删除的通知邮件。
+    """
+    settings = get_settings()
+    subject = f"【{settings.MAIL_FROM_NAME}】账户删除通知"
+
+    html_content = f"""
+    <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+                .container {{ padding: 20px; border: 1px solid #ddd; border-radius: 5px; max-width: 600px; margin: 20px auto; }}
+                p {{ margin-bottom: 15px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <p>您好 {username},</p>
+                <p>我们特此通知，您在【{settings.MAIL_FROM_NAME}】的账户已被管理员删除。</p>
+                <p>如果您对此操作有任何疑问，请联系网站管理员。</p>
+                <p>此致，<br/>【{settings.MAIL_FROM_NAME}】团队</p>
+            </div>
+        </body>
+    </html>
+    """
+    await send_email(subject=subject, recipients=[email_to], html_body=html_content)
+
+

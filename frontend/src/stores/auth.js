@@ -1,126 +1,101 @@
-﻿// src/stores/auth.js
-import { defineStore } from 'pinia';
+﻿import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useSettingsStore } from './settings';
-
-// API 基地址常量不再需要在这里定义
-// const API_BASE_URL = 'http://localhost:8000'; // <--- 删除或注释掉这行
+import apiClient from '@/api';
 
 export const useAuthStore = defineStore('auth', () => {
-    const settingsStore = useSettingsStore(); // 2. 获取 settingsStore 实例
+  // --- State ---
+  const accessToken = ref(localStorage.getItem('access_token') || null);
+  const refreshToken = ref(localStorage.getItem('refresh_token') || null);
+  const user = ref(JSON.parse(localStorage.getItem('user_info')) || null);
+  const isLoadingUser = ref(false);
+  const userError = ref(null);
 
-    // --- State ---
-    const accessToken = ref(localStorage.getItem('access_token') || null);
-    const refreshToken = ref(localStorage.getItem('refresh_token') || null);
-    const user = ref(JSON.parse(localStorage.getItem('user_info')) || null);
+  // --- Getters ---
+  const isLoggedIn = computed(() => !!accessToken.value);
+  const isAdmin = computed(() => user.value?.role === 'admin');
 
+  // --- Actions ---
 
-    const isLoadingUser = ref(false);
-    const userError = ref(null);
+  function setTokens(newAccessToken, newRefreshToken) {
+    accessToken.value = newAccessToken;
+    refreshToken.value = newRefreshToken;
+    if (newAccessToken) {
+      localStorage.setItem('access_token', newAccessToken);
+    } else {
+      localStorage.removeItem('access_token');
+    }
+    if (newRefreshToken) {
+      localStorage.setItem('refresh_token', newRefreshToken);
+    } else {
+      localStorage.removeItem('refresh_token');
+    }
+  }
 
-    // --- Getters ---
-    const isLoggedIn = computed(() => !!accessToken.value);
+  function setUserInfo(userInfo) {
+    user.value = userInfo;
+    if (userInfo) {
+      localStorage.setItem('user_info', JSON.stringify(userInfo));
+    } else {
+      localStorage.removeItem('user_info');
+    }
+  }
 
-    // --- Actions ---
+  async function login(loginTokenData) {
+    setTokens(loginTokenData.access_token, loginTokenData.refresh_token);
+    if (accessToken.value) {
+      await fetchAndSetUser();
+    }
+  }
+
+  function logout() {
+    // 【核心修正】: 在函数内部获取 router 实例
     const router = useRouter();
 
-    function setTokens(newAccessToken, newRefreshToken) {
-        accessToken.value = newAccessToken;
-        refreshToken.value = newRefreshToken;
-        if (newAccessToken) {
-            localStorage.setItem('access_token', newAccessToken);
-        } else {
-            localStorage.removeItem('access_token');
-        }
-        if (newRefreshToken) {
-            localStorage.setItem('refresh_token', newRefreshToken);
-        } else {
-            localStorage.removeItem('refresh_token');
-        }
+    setTokens(null, null);
+    setUserInfo(null);
+
+    // 现在 router 实例是有效的
+    router.push('/login').catch(err => {
+        if (err.name !== 'NavigationDuplicated') { console.error(err); }
+    });
+  }
+
+  async function fetchAndSetUser() {
+    if (!accessToken.value) return null;
+
+    isLoadingUser.value = true;
+    userError.value = null;
+    try {
+      const userData = await apiClient.get('/users/me');
+      setUserInfo(userData);
+      return userData;
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      userError.value = '无法获取用户信息。';
+      return null;
+    } finally {
+      isLoadingUser.value = false;
     }
+  }
 
-    function setUserInfo(userInfo) {
-        user.value = userInfo;
-        if (userInfo) {
-            localStorage.setItem('user_info', JSON.stringify(userInfo));
-        } else {
-            localStorage.removeItem('user_info');
-        }
+  async function initAuth() {
+    if (isLoggedIn.value && !user.value) {
+      await fetchAndSetUser();
     }
+  }
 
-    async function login(loginTokenData) {
-        setTokens(loginTokenData.access_token, loginTokenData.refresh_token);
-        if (accessToken.value) {
-            await fetchAndSetUser();
-        }
-    }
-
-    async function fetchAndSetUser() {
-        if (!accessToken.value) {
-            console.warn('尝试获取用户信息，但 access token 不存在。');
-            setUserInfo(null);
-            return null;
-        }
-
-        // ++ 修改此函数 ++
-        isLoadingUser.value = true;
-        userError.value = null;
-        try {
-            const response = await fetch(`${settingsStore.apiBaseUrl}/users/me`, {
-                headers: { 'Authorization': `Bearer ${accessToken.value}` }
-            });
-            if (response.ok) {
-                const userData = await response.json();
-                setUserInfo(userData);
-                return userData;
-            } else {
-                const errorData = await response.text();
-                console.error('获取用户信息失败:', response.status, errorData);
-                userError.value = `获取用户信息失败 (状态: ${response.status})。`;
-                if (response.status === 401) {
-                    logout(); // 令牌无效或过期，自动登出
-                }
-                setUserInfo(null);
-                return null;
-            }
-        } catch (error) {
-            console.error('获取用户信息时发生网络错误:', error);
-            userError.value = '网络或服务器错误，无法获取用户信息。';
-            setUserInfo(null);
-            return null;
-        } finally {
-            isLoadingUser.value = false;
-        }
-    }
-
-
-    function logout() {
-        setTokens(null, null);
-        setUserInfo(null);
-        if (router) {
-            router.push('/login').catch(err => {
-                if (err.name !== 'NavigationDuplicated') { console.error(err); }
-            });
-        }
-    }
-
-    async function initAuth() {
-        if (isLoggedIn.value && !user.value) {
-            await fetchAndSetUser();
-        }
-    }
-
-    return {
-        accessToken,
-        refreshToken,
-        user,
-        isLoggedIn,
-        login,
-        logout,
-        fetchAndSetUser,
-        setTokens,
-        setUserInfo,
-        initAuth,
-    };
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    isLoggedIn,
+    isAdmin,
+    isLoadingUser,
+    userError,
+    login,
+    logout,
+    fetchAndSetUser,
+    initAuth,
+  };
 });

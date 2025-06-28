@@ -1,5 +1,5 @@
-﻿import { defineStore } from 'pinia';
-import { ref } from 'vue';
+﻿import {defineStore} from 'pinia';
+import {ref} from 'vue';
 import apiClient from "@/api.js";
 
 // 定义日间模式的颜色主题变量
@@ -31,6 +31,7 @@ const darkThemeColors = {
 
 export const useSettingsStore = defineStore('settings', () => {
     // --- State ---
+    const trackingCode = ref('');
     const apiBaseUrl = ref(import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
     const contactInfo = ref({});
     const beian = ref({});
@@ -40,6 +41,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const isRegistrationEnabled = ref(true);
     const heroSection = ref({});
     const footer = ref({});
+    const aboutPageHtml = ref(''); // <--- 新增的状态
 
     // --- Actions ---
 
@@ -80,46 +82,33 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     async function initialize() {
-        // 步骤 1: 首先，专门加载和处理 site-config.json
         try {
-            // 注意：这里使用原生 fetch，因为它不依赖于 apiClient 的 baseURL
             const response = await fetch('/site-config.json');
             if (!response.ok) {
                 throw new Error(`Failed to fetch site-config.json with status ${response.status}`);
             }
             const config = await response.json();
-
-            // 步骤 2: 立刻更新 apiBaseUrl
-            // 确保后续所有 apiClient 请求都使用正确的地址
+            trackingCode.value = config.trackingCode || '';
             apiBaseUrl.value = config.apiBaseUrl || apiBaseUrl.value;
-
-            // 更新其他非API依赖的配置
             contactInfo.value = config.contactInfo || {};
             beian.value = config.beian || {};
-            heroSection.value = config.heroSection || {
-                title: '安迪与莉莉的Minecraft',
-                subtitle: '一个存放记忆与创造的角落'
-            };
+            heroSection.value = config.heroSection || {};
             footer.value = config.footer || {};
+            aboutPageHtml.value = config.aboutPageHtml || ''; // <--- 赋值
 
         } catch (error) {
             console.error('无法加载基础站点配置 (site-config.json):', error);
-            console.info('将使用默认配置，部分功能可能无法使用。');
-            // 加载基础配置失败，直接结束初始化，并初始化主题
             initializeTheme();
-            return; // 提前返回，不再执行后续API调用
+            return;
         }
 
-        // 步骤 3: 在 apiBaseUrl 确保正确后，再进行依赖API的配置加载
         try {
             const publicConfig = await apiClient.get('/config/public');
             isRegistrationEnabled.value = publicConfig.enable_registration;
-        } catch(error) {
+        } catch (error) {
             console.error("无法从后端加载公共配置:", error);
-            // 这里可以设置一个默认值或显示错误信息，但不会影响 apiBaseUrl
         }
 
-        // 步骤 4: 最后初始化主题
         initializeTheme();
     }
 
@@ -133,6 +122,8 @@ export const useSettingsStore = defineStore('settings', () => {
         theme,
         currentAppliedTheme,
         availableThemes,
+        aboutPageHtml,
+        trackingCode,
         initialize,
         setTheme,
     };

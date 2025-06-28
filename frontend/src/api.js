@@ -1,49 +1,43 @@
-﻿// 文件: frontend/src/api.js
-import axios from 'axios';
+﻿import axios from 'axios';
 import { useAuthStore } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
 
 const apiClient = axios.create();
 
-// 请求拦截器：自动附加认证头和API基础地址
+// 请求拦截器：在每个请求发送前附加认证头
 apiClient.interceptors.request.use(
-    (config) => {
-        // 在 Pinia 插件注册后，可以在这里安全地使用 store
-        const authStore = useAuthStore();
-        const settingsStore = useSettingsStore();
+  (config) => {
+    // 拦截器内获取 store 实例，确保是激活的
+    const authStore = useAuthStore();
+    const settingsStore = useSettingsStore();
 
-        // --- 核心修正 ---
-        // 不在创建时设置 baseURL，而是在每次请求时动态获取
-        // 确保总是使用最新的 apiBaseUrl
-        if (!config.baseURL) {
-            config.baseURL = settingsStore.apiBaseUrl;
-        }
+    config.baseURL = settingsStore.apiBaseUrl;
 
-        if (authStore.accessToken) {
-            config.headers.Authorization = `Bearer ${authStore.accessToken}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
+    // 【核心修正】: 使用正确的 `accessToken` 属性
+    if (authStore.accessToken) {
+      config.headers['Authorization'] = `Bearer ${authStore.accessToken}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// 响应拦截器：统一处理错误，例如401自动登出
+// 响应拦截器：处理后端返回的错误，例如token失效时自动登出
 apiClient.interceptors.response.use(
-    (response) => response.data, // 直接返回 data，简化后续处理
-    (error) => {
-        // 确保 useAuthStore 可以在这里被调用
-        // 这通常是安全的，因为此时 Pinia 已经被安装
-        try {
-            const authStore = useAuthStore();
-            if (error.response && error.response.status === 401) {
-                authStore.logout();
-            }
-        } catch (e) {
-            // 如果 store 还不可用，则只记录错误
-            console.error("无法在响应拦截器中访问 auth store:", e);
-        }
-        return Promise.reject(error);
+  // 对成功的响应直接返回 data
+  (response) => response.data,
+
+  (error) => {
+    // 如果后端返回 401 (未认证) 错误
+    if (error.response && error.response.status === 401) {
+      const authStore = useAuthStore();
+      authStore.logout(); // 调用登出 action，清除本地数据并跳转
     }
+    return Promise.reject(error);
+  }
 );
 
 export default apiClient;

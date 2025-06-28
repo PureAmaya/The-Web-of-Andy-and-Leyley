@@ -154,15 +154,13 @@ async def get_current_user_from_token(
 
 async def get_current_active_user(
         token_data: TokenData = Depends(get_current_user_from_token),
-        session: AsyncSession = Depends(get_async_session) # 依赖 AsyncSession
+        session: AsyncSession = Depends(get_async_session)
 ) -> User:
     """
     依赖项：从已验证的访问令牌中获取当前用户，并检查用户是否处于活动状态。
     如果令牌无效、用户不存在或用户非活动，则抛出异常。
     """
-    # 使用异步方式从数据库获取用户
-    result = await session.exec(select(User).where(User.id == token_data.user_id))
-    user = result.first()
+    user = await session.get(User, token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="与令牌关联的用户未找到")

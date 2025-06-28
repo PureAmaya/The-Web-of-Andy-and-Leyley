@@ -6,7 +6,8 @@
         <ul class="links-list">
           <li v-for="link in links" :key="link.id">
             <a :href="link.url" target="_blank" rel="noopener noreferrer">
-              <img v-if="link.logo_url" :src="link.logo_url" :alt="`${link.name} Logo`" class="link-logo" @error="onLogoError">
+              <img v-if="link.logo_url" :src="link.logo_url" :alt="`${link.name} Logo`" class="link-logo"
+                   @error="onLogoError">
               <span>{{ link.name }}</span>
             </a>
           </li>
@@ -14,9 +15,7 @@
       </div>
 
       <div class="copyright-section">
-        <!-- 使用 computed property 来动态生成版权信息 -->
         <p>{{ copyrightText }}</p>
-
         <p class="beian-info" v-if="settingsStore.beian.icp">
           <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">{{ settingsStore.beian.icp }}</a>
           <template v-if="settingsStore.beian.gongan && settingsStore.beian.gongan.text">
@@ -27,18 +26,20 @@
           </template>
         </p>
       </div>
+
+      <div v-if="settingsStore.footer.customHtml" v-html="settingsStore.footer.customHtml"
+           class="custom-html-section"></div>
     </div>
   </footer>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // 引入 computed
-import { useSettingsStore } from '@/stores/settings';
+import {ref, onMounted, computed} from 'vue';
+import {useSettingsStore} from '@/stores/settings';
 
 const settingsStore = useSettingsStore();
 const links = ref([]);
 
-// --- 新增：使用计算属性动态生成版权字符串 ---
 const copyrightText = computed(() => {
   const owner = settingsStore.footer.copyrightOwner || 'Your Name';
   const startYear = settingsStore.footer.startYear;
@@ -52,6 +53,7 @@ const copyrightText = computed(() => {
 
 async function fetchFriendLinks() {
   try {
+    // 友情链接功能保持不变
     const response = await fetch(`${settingsStore.apiBaseUrl}/friend-links`);
     if (response.ok) {
       links.value = await response.json();
@@ -153,5 +155,12 @@ onMounted(() => {
 
 .beian-info .separator {
   margin: 0 10px;
+}
+
+.custom-html-section {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.8em;
+  color: var(--link-color);
 }
 </style>

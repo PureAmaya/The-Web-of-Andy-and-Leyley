@@ -7,16 +7,14 @@
       </div>
     </section>
 
-
     <section class="content-section gallery-preview">
       <h2 class="section-title">最新作品</h2>
-      <!-- 使用 v-if 控制加载状态的显示 -->
       <div v-if="isLoading" class="loading-message">加载中...</div>
       <div v-if="galleryError" class="error-message">{{ galleryError }}</div>
 
       <div v-if="!isLoading && galleryItems.length > 0" class="preview-grid">
-        <div v-for="item in galleryItems" :key="item.id" class="preview-item">
-          <img :src="getFullImageUrl(item.thumbnail_url || item.image_url)" :alt="item.title" class="preview-image" />
+        <div v-for="item in galleryItems" :key="item.id" class="preview-item" @click="showItemInLightbox(item)" @keydown.enter="showItemInLightbox(item)" role="button" tabindex="0">
+          <img :src="getFullImageUrl(item.thumbnail_url || item.image_url, null, settingsStore.apiBaseUrl)" :alt="item.title" class="preview-image" loading="lazy" />
           <div class="preview-overlay">
             <p>{{ item.title }}</p>
           </div>
@@ -30,10 +28,8 @@
     <section class="content-section team-section">
       <h2 class="section-title">核心成员</h2>
       <div class="team-grid">
-        <div v-for="member in teamMembers" :key="member.id" class="team-member-card" @click="openMemberModal(member)">
-          <img :src="getFullImageUrl(member.avatar_url, member.name)" :alt="member.name" class="team-avatar" />
-          <h3 class="team-member-name">{{ member.name }}</h3>
-          <p class="team-member-role">{{ member.role }}</p>
+        <div v-for="member in teamMembers" :key="member.id" @click="openMemberModal(member)" class="team-member-card-wrapper">
+          <TeamMemberCard :member="member" />
         </div>
       </div>
     </section>
@@ -56,17 +52,17 @@
       </div>
     </section>
 
-    <div v-if="isModalOpen" class="modal-backdrop" @click="closeMemberModal">
-      <div class="modal-content" @click.stop>
-        <button class="modal-close-button" @click="closeMemberModal">&times;</button>
-        <div v-if="selectedMember">
-          <img :src="getFullImageUrl(selectedMember.avatar_url, selectedMember.name)" :alt="selectedMember.name" class="modal-avatar" />
-          <h2>{{ selectedMember.name }}</h2>
-          <h4>{{ selectedMember.role }}</h4>
-          <p class="modal-bio">{{ selectedMember.bio }}</p>
-        </div>
-      </div>
-    </div>
+    <MemberModal
+      :isOpen="isModalOpen"
+      :member="selectedMember"
+      @close="closeMemberModal"
+    />
+
+    <Lightbox
+      :selectedItem="selectedItemForLightbox"
+      :apiBaseUrl="settingsStore.apiBaseUrl"
+      @close="closeLightbox"
+    />
   </div>
 </template>
 
@@ -75,28 +71,29 @@ import { ref, onMounted, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useSettingsStore } from '@/stores/settings';
 import apiClient from '@/api';
+import Lightbox from '@/components/Lightbox.vue';
+import MemberModal from '@/components/MemberModal.vue';
+import TeamMemberCard from '@/components/TeamMemberCard.vue';
+import { getFullImageUrl } from '@/utils/imageUtils';
 
 const settingsStore = useSettingsStore();
 
-// --- 状态定义 ---
 const teamMembers = ref([]);
 const galleryItems = ref([]);
 const isLoading = ref(true);
 const galleryError = ref(null);
 const selectedMember = ref(null);
 const isModalOpen = ref(false);
-
+const selectedItemForLightbox = ref(null);
 const animatedTitle = ref('');
 const animatedSubtitle = ref('');
 const isTyping = ref(false);
-let animationStarted = false; // 动画执行锁
+let animationStarted = false;
 
-// --- 动画函数 ---
 function typeWriter(text, elementRef, speed) {
   return new Promise((resolve) => {
     let i = 0;
     elementRef.value = '';
-
     function typing() {
       if (i < text.length) {
         elementRef.value += text.charAt(i);
@@ -110,17 +107,12 @@ function typeWriter(text, elementRef, speed) {
   });
 }
 
-// --- 【核心修正】使用 watch 响应式地启动动画 ---
 watch(
   () => settingsStore.heroSection,
   (newConfig) => {
-    // 检查：1. 配置对象和标题是否存在  2. 动画是否尚未开始
     if (newConfig && newConfig.title && !animationStarted) {
-      // 立刻上锁，防止重复执行
       animationStarted = true;
       isTyping.value = true;
-
-      // 使用 Promise 链确保动画按顺序执行
       typeWriter(newConfig.title, animatedTitle, 150)
         .then(() => {
           if (newConfig.subtitle) {
@@ -128,15 +120,13 @@ watch(
           }
         })
         .finally(() => {
-          // 所有动画结束后隐藏光标
           isTyping.value = false;
         });
     }
   },
-  { deep: true } // deep: true 确保能监听到对象内部属性的变化
+  { deep: true }
 );
 
-// --- onMounted 只负责获取本组件需要的数据 ---
 onMounted(async () => {
   const fetchGallery = async () => {
     try {
@@ -149,7 +139,6 @@ onMounted(async () => {
       isLoading.value = false;
     }
   };
-
   const fetchMembers = async () => {
     try {
       teamMembers.value = await apiClient.get('/members');
@@ -157,24 +146,8 @@ onMounted(async () => {
       console.error('获取成员信息失败:', err);
     }
   };
-
-  await Promise.all([
-    fetchGallery(),
-    fetchMembers()
-  ]);
+  await Promise.all([fetchGallery(), fetchMembers()]);
 });
-
-// --- 辅助函数 ---
-const getFullImageUrl = (relativeUrl, mcName = null) => {
-  if (relativeUrl) {
-    if (relativeUrl.startsWith('http')) return relativeUrl;
-    return `${settingsStore.apiBaseUrl}${relativeUrl}`;
-  }
-  if (mcName) {
-    return `${settingsStore.apiBaseUrl}/avatars/mc/${mcName}`;
-  }
-  return 'https://via.placeholder.com/100.png?text=No+Avatar';
-};
 
 const openMemberModal = (member) => {
   selectedMember.value = member;
@@ -183,10 +156,16 @@ const openMemberModal = (member) => {
 
 const closeMemberModal = () => {
   isModalOpen.value = false;
-  selectedMember.value = null;
 };
-</script>
 
+function showItemInLightbox(item) {
+  selectedItemForLightbox.value = item;
+}
+
+function closeLightbox() {
+  selectedItemForLightbox.value = null;
+}
+</script>
 
 <style scoped>
 .home-container {
@@ -296,35 +275,8 @@ const closeMemberModal = () => {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 2rem;
 }
-.team-member-card {
-    background: transparent;
-    border: 2px solid var(--border-color);
-    padding: 1.5rem;
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
-    box-shadow: 5px 5px 0 0 var(--border-color);
-}
-.team-member-card:hover {
-    background-color: var(--secondary-bg-color);
-    border-color: var(--primary-accent-color);
-    box-shadow: 5px 5px 0 0 var(--primary-accent-color);
-}
-.team-avatar {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin-bottom: 1rem;
-    border: 2px solid var(--primary-accent-color);
-}
-.team-member-name {
-    margin: 0.5rem 0;
-    font-size: 1.2rem;
-    color: var(--main-text-color);
-}
-.team-member-role {
-    font-size: 0.9rem;
-    color: var(--link-color);
+.team-member-card-wrapper {
+  cursor: pointer;
 }
 .contact-info {
     margin-top: 1.5rem;
@@ -332,58 +284,10 @@ const closeMemberModal = () => {
     line-height: 1.8;
     color: var(--main-text-color);
 }
-
 .contact-info strong {
     color: var(--link-color);
     font-weight: 700;
-    margin-right: 8px; /* 修复：为标签和链接之间添加间距 */
-}
-
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 20px;
-  box-sizing: border-box;
-}
-.modal-content {
-  background-color: var(--main-bg-color);
-  padding: 2rem 3rem;
-  border: 1px solid var(--border-color);
-  width: 90%;
-  max-width: 500px;
-  position: relative;
-  text-align: center;
-}
-.modal-close-button {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  background: none;
-  border: none;
-  font-size: 2rem;
-  color: var(--link-color);
-  cursor: pointer;
-}
-.modal-avatar {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    margin-bottom: 1rem;
-}
-.modal-bio {
-    margin: 1.5rem 0;
-    text-align: left;
-    line-height: 1.7;
-    color: var(--main-text-color);
+    margin-right: 8px;
 }
 .loading-message, .error-message {
     margin-top: 2rem;

@@ -1,18 +1,6 @@
 // src/router/index.js
 import {createRouter, createWebHistory} from 'vue-router'
 import {useAuthStore} from '../stores/auth'
-
-import HomeView from '../views/HomeView.vue'
-import GalleryView from '../views/GalleryView.vue'
-import ResetPasswordView from '../views/ResetPasswordView.vue'
-import LoginView from '../views/LoginView.vue'
-import RegisterView from '../views/RegisterView.vue'
-import UserProfileView from '../views/UserProfileView.vue'
-import UploadView from '../views/UploadView.vue'
-import RequestPasswordResetView from '../views/RequestPasswordResetView.vue'
-import AdminView from '../views/AdminView.vue'
-import VerifyEmailView from '../views/VerifyEmailView.vue'; // <--- 新增：导入 VerifyEmailView
-
 import {useSettingsStore} from "@/stores/settings.js"
 
 
@@ -20,62 +8,66 @@ const routes = [
     {
         path: '/',
         name: 'home',
-        component: HomeView
+        component: () => import('../views/HomeView.vue')
     },
     {
         path: '/gallery',
         name: 'gallery',
-        component: GalleryView
+        component: () => import('../views/GalleryView.vue')
     },
     {
         path: '/reset-password',
         name: 'reset-password',
-        component: ResetPasswordView,
+        component: () => import('../views/ResetPasswordView.vue'),
         meta: {guestOnly: true}
     },
-    // <--- 新增：邮箱验证路由
     {
         path: '/verify-email',
         name: 'verify-email',
-        component: VerifyEmailView,
-        meta: {guestOnly: true} // 邮件验证通常是未登录用户访问
+        component: () => import('../views/VerifyEmailView.vue'),
+        meta: {guestOnly: true}
     },
     {
         path: '/login',
         name: 'login',
-        component: LoginView,
+        component: () => import('../views/LoginView.vue'),
         meta: {guestOnly: true}
     },
     {
         path: '/register',
         name: 'register',
-        component: RegisterView,
+        component: () => import('../views/RegisterView.vue'),
         meta: {guestOnly: true}
     },
     {
         path: '/request-password-reset',
         name: 'request-password-reset',
-        component: RequestPasswordResetView,
+        component: () => import('../views/RequestPasswordResetView.vue'),
         meta: {guestOnly: true}
     },
     {
         path: '/profile',
         name: 'profile',
-        component: UserProfileView,
+        component: () => import('../views/UserProfileView.vue'),
         meta: {requiresAuth: true}
     },
     {
         path: '/upload',
         name: 'upload',
-        component: UploadView,
+        component: () => import('../views/UploadView.vue'),
         meta: {requiresAuth: true}
     },
     {
         path: '/admin-dashboard',
         name: 'admin-dashboard',
-        component: AdminView,
-        meta: { requiresAuth: true, requiresAdmin: true }
-    }
+        component: () => import('../views/AdminView.vue'),
+        meta: {requiresAuth: true, requiresAdmin: true}
+    },
+    {
+        path: '/about',
+        name: 'about',
+        component: () => import('../views/AboutView.vue')
+    },
 ];
 
 const router = createRouter({
@@ -83,6 +75,7 @@ const router = createRouter({
     routes
 });
 
+// --- (路由守卫部分保持不变) ---
 router.beforeEach((to, from, next) => {
     const authStore = useAuthStore();
     const settingsStore = useSettingsStore();
@@ -92,19 +85,19 @@ router.beforeEach((to, from, next) => {
     const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
 
     if (to.name === 'register' && !settingsStore.isRegistrationEnabled) {
-        return next({ name: 'home' });
+        return next({name: 'home'});
     }
 
     if (requiresAuth && !authStore.isLoggedIn) {
-        return next({ name: 'login', query: { redirect: to.fullPath } });
+        return next({name: 'login', query: {redirect: to.fullPath}});
     }
 
     if (requiresAdmin && authStore.user?.role !== 'admin') {
-        return next({ name: 'home' });
+        return next({name: 'home'});
     }
 
     if (guestOnly && authStore.isLoggedIn) {
-        return next({ name: 'home' });
+        return next({name: 'home'});
     }
 
     next();

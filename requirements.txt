@@ -38,10 +38,6 @@ pillow~=10.3.0
 # For video thumbnail generation (headless version for servers)
 opencv-python-headless~=4.9.0
 
-# --- Admin Panel ---
-# For the automatic admin interface
-sqladmin~=0.16.1
-
 # --- Utilities & Services ---
 # For sending emails (e.g., registration, password reset)
 fastapi-mail~=1.4.1

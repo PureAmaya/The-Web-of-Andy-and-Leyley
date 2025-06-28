@@ -396,3 +396,12 @@ class FriendLinkRead(SQLModel):
     logo_url: Optional[str] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
+
+
+class AdminUserUpdate(SQLModel):
+    """
+    A model for what an admin can update on a user's profile.
+    """
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None

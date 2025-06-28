@@ -25,6 +25,8 @@ if ENV_PATH.exists():
 # --- 结束调试打印 ---
 
 class Settings(BaseSettings):
+    SESSION_SECRET_KEY: str
+
     # 邮件配置
     MAIL_USERNAME: EmailStr = "your_email_username@example.com"
     MAIL_PASSWORD: str = "your_super_secret_email_password"

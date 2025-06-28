@@ -1,4 +1,7 @@
 <template>
+  <!-- 新增：追踪代码注入区域 -->
+  <div v-if="settingsStore.trackingCode" v-html="settingsStore.trackingCode"></div>
+
   <div id="app-layout">
     <header class="app-header">
       <div class="header-content">
@@ -10,9 +13,10 @@
         </div>
         <nav class="main-nav">
           <RouterLink to="/gallery" class="nav-link">画廊</RouterLink>
+          <RouterLink to="/about" class="nav-link">关于</RouterLink>
           <RouterLink v-if="authStore.isLoggedIn" to="/upload" class="nav-link">上传作品</RouterLink>
           <RouterLink
-              v-if="authStore.isLoggedIn && authStore.user?.role === 'admin'"
+              v-if="authStore.isLoggedIn && authStore.isAdmin"
               to="/admin-dashboard"
               class="nav-link"
           >
@@ -58,7 +62,6 @@
 </template>
 
 <script setup>
-// Script 部分与之前版本完全相同，无需修改
 import {RouterLink, RouterView, useRouter} from 'vue-router';
 import {onMounted, ref, watch} from 'vue';
 import {useAuthStore} from '@/stores/auth';
@@ -69,22 +72,23 @@ const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
 const selectedTheme = ref(settingsStore.theme);
+
 watch(() => settingsStore.theme, (newThemePreference) => {
   if (selectedTheme.value !== newThemePreference) {
     selectedTheme.value = newThemePreference;
   }
 });
+
 onMounted(async () => {
   await settingsStore.initialize();
   selectedTheme.value = settingsStore.theme;
-  if (authStore.accessToken && !authStore.user) {
+  if (authStore.isLoggedIn && !authStore.user) {
     await authStore.fetchAndSetUser();
   }
 });
 
 function handleLogout() {
   authStore.logout();
-  router.push('/login');
 }
 
 function onThemeChange() {
@@ -103,7 +107,7 @@ function onThemeChange() {
 
 .app-header {
   background-color: var(--secondary-bg-color);
-  padding: 0.8rem 0;
+  padding: 0.5rem 0;
   border-bottom: 2px solid var(--border-color);
   position: sticky;
   top: 0;
@@ -119,7 +123,10 @@ function onThemeChange() {
   box-sizing: border-box;
 }
 
-/* Logo 与标题 */
+.logo {
+  flex-shrink: 0; /* 核心修正：防止logo容器在flex布局中被压缩 */
+}
+
 .logo a {
   display: flex;
   align-items: center;
@@ -154,7 +161,6 @@ function onThemeChange() {
   box-sizing: border-box;
 }
 
-/* 导航栏 */
 .main-nav {
   display: flex;
   align-items: center;
@@ -166,7 +172,7 @@ function onThemeChange() {
 .nav-link {
   color: var(--link-color);
   text-decoration: none;
-  padding: 0.5rem 0.8rem;
+  padding: 0.3rem 0.8rem;
   transition: all 0.2s;
   font-size: 1rem;
   font-family: var(--font-main);
@@ -178,12 +184,11 @@ function onThemeChange() {
   text-shadow: 0 0 5px var(--primary-accent-color);
 }
 
-/* ... 其他样式如 .nav-button, .theme-switcher 等保持不变 ... */
 .nav-button.logout-button {
   background-color: transparent;
   color: var(--link-color);
   border: 2px solid var(--border-color);
-  padding: 0.5rem 1rem;
+  padding: 0.3rem 1rem;
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 1rem;
@@ -211,8 +216,6 @@ function onThemeChange() {
   outline: 2px solid var(--primary-accent-color);
 }
 
-
-/* “故障”页面切换效果 */
 .glitch-fade-enter-active,
 .glitch-fade-leave-active {
   transition: opacity 0.3s ease-in-out;
@@ -229,21 +232,26 @@ function onThemeChange() {
 }
 
 @keyframes glitch-in {
-  0% {
-    transform: translate(-1%, -2%);
-    opacity: 0;
+  0% { transform: translate(-1%, -2%); opacity: 0; }
+  25% { transform: translate(2%, 1%); opacity: 0.25; }
+  50% { transform: translate(-2%, 2%); opacity: 0.75; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    padding: 0 1rem;
   }
-  25% {
-    transform: translate(2%, 1%);
-    opacity: 0.25;
+  .site-logo-text {
+    font-size: 1.1rem;
   }
-  50% {
-    transform: translate(-2%, 2%);
-    opacity: 0.75;
+  .main-nav {
+    gap: 2px;
+    margin-left: 20px;
   }
-  100% {
-    transform: translate(0, 0);
-    opacity: 1;
+  .nav-link {
+    font-size: 0.9rem;
+    padding: 0.3rem 0.5rem;
   }
 }
 </style>

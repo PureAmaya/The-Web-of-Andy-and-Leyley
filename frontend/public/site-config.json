@@ -1,11 +1,9 @@
-﻿{
+{
   "apiBaseUrl": "http://127.0.0.1:8000",
-
   "heroSection": {
     "title": "安迪与莉莉的Minecraft",
     "subtitle": "一个存放记忆与创造的角落"
   },
-
   "contactInfo": {
     "title": "联系我们",
     "description": "如果您有任何问题或合作意向，请通过以下方式联系我们：",
@@ -14,20 +12,26 @@
         "label": "邮箱",
         "value": "contact@yourdomain.com",
         "url": "mailto:contact@yourdomain.com"
+      },
+      {
+        "label": "QQ群",
+        "value": "123456789",
+        "url": null
       }
     ]
   },
-
   "footer": {
-    "copyrightOwner": "Yuzuki Asane",
-    "startYear": 2025
+    "copyrightOwner": "你的名字或团队名",
+    "startYear": 2025,
+    "customHtml": ""
   },
-
   "beian": {
-    "icp": "",
+    "icp": "你的ICP备案号",
     "gongan": {
-      "text": "",
-      "link": ""
+      "text": "你的公安备案号",
+      "link": "你的公安备案链接"
     }
-  }
+  },
+  "aboutPageHtml": "<h1>关于我们</h1><p>这是一个由管理员在后台自定义的<strong>关于</strong>页面。</p><p>你可以使用任何 <em>HTML</em> 标签来丰富这里的样式，例如图片：</p><img src=\"https://via.placeholder.com/800x200.png?text=Your+Banner+Image\" alt=\"示例横幅\" />",
+  "trackingCode": ""
 }

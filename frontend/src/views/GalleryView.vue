@@ -23,6 +23,7 @@
             :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/400x300.png?text=Image'"
             :alt="item.title"
             class="gallery-media"
+            loading="lazy"
           />
           <video
             v-else-if="item.item_type === 'video'"
@@ -115,6 +116,7 @@
 import { ref, onMounted } from 'vue';
 import apiClient from '@/api';
 import { useSettingsStore } from '@/stores/settings';
+import Lightbox from '@/components/Lightbox.vue';
 
 const settingsStore = useSettingsStore();
 
@@ -160,16 +162,7 @@ function closeLightbox() {
   selectedItemForLightbox.value = null;
 }
 
-const getDownloadFilename = (item) => {
-  if (!item || !item.image_url) return 'download';
-  // 从 image_url 中提取文件扩展名
-  const extension = item.image_url.split('.').pop();
-  return `${item.title}.${extension}`;
-};
 
-onMounted(() => {
-  fetchGalleryItems(currentPage.value, pageSize.value);
-});
 </script>
 
 <style scoped>
@@ -304,125 +297,6 @@ onMounted(() => {
 }
 
 
-/* 灯箱 (大图预览) */
-.lightbox-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(31, 29, 27, 0.95);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 1rem;
-  box-sizing: border-box;
-  animation: fadeIn 0.3s ease;
-}
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-.lightbox-content {
-  display: flex;
-  flex-direction: column;
-  max-width: 95vw;
-  max-height: 95vh;
-  position: relative;
-  background-color: var(--secondary-bg-color);
-  border: 2px solid var(--border-color);
-}
-@media (min-width: 1024px) {
-  .lightbox-content { flex-direction: row; max-width: 90vw; }
-}
-
-.lightbox-media {
-  flex-shrink: 1;
-  object-fit: contain;
-  min-width: 0;
-  min-height: 0;
-  background-color: #000;
-  max-height: 90vh;
-}
-@media (min-width: 1024px) {
-  .lightbox-media { border-right: 2px solid var(--border-color); }
-}
-
-.lightbox-details {
-  padding: 1.5rem;
-  box-sizing: border-box;
-  text-align: left;
-  overflow-y: auto;
-  flex-shrink: 0;
-  width: 100%;
-  max-height: 40vh;
-}
-@media (min-width: 1024px) {
-  .lightbox-details { width: 350px; max-height: none; }
-}
-
-.lightbox-details h2 {
-  font-family: var(--font-special), cursive;
-  font-size: 1.8rem;
-  margin: 0 0 1rem;
-  color: var(--main-text-color);
-}
-.lightbox-description {
-  font-size: 1rem;
-  line-height: 1.7;
-  color: var(--main-text-color);
-  opacity: 0.9;
-  margin-bottom: 2rem;
-}
-.lightbox-meta {
-  font-size: 0.9rem;
-  opacity: 0.7;
-  border-top: 1px solid var(--border-color);
-  padding-top: 1rem;
-  margin-bottom: 2rem;
-}
-
-/* 下载按钮样式 */
-.download-button {
-  display: block;
-  width: 100%;
-  padding: 12px 20px;
-  box-sizing: border-box;
-  background-color: var(--primary-accent-color);
-  color: var(--button-text-color);
-  text-align: center;
-  text-decoration: none;
-  font-family: var(--font-main);
-  font-weight: 700;
-  font-size: 1.1rem;
-  border: 2px solid var(--border-color);
-  transition: background-color 0.2s;
-}
-.download-button:hover {
-  background-color: #6e3636;
-}
-
-.close-button {
-  position: absolute;
-  top: -20px;
-  right: -20px;
-  width: 40px;
-  height: 40px;
-  background: var(--main-bg-color);
-  border: 2px solid var(--border-color);
-  border-radius: 50%;
-  color: var(--main-text-color);
-  font-size: 2rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: all 0.2s;
-}
-.close-button:hover {
-  transform: rotate(90deg) scale(1.1);
-  color: var(--primary-accent-color);
-}
 
 /* 分页组件样式 */
 .pagination {

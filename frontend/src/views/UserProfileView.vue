@@ -12,15 +12,14 @@
 
     <div v-else-if="authStore.user" class="profile-details-wrapper">
       <div class="profile-avatar-section">
-        <img
-            v-if="authStore.user && authStore.user.mc_name"
-            :src='`<span class=" math-inline">\{settingsStore\.apiBaseUrl\}/avatars/mc/</span>{authStore.user.mc_name}`'
-        alt="Minecraft Avatar"
-        class="mc-avatar"
+        <Avatar
+            v-if="authStore.user.mc_name"
+            :name="authStore.user.mc_name"
+            alt="Minecraft Avatar"
+            class="mc-avatar"
         />
         <div v-else class="mc-avatar-placeholder">无MC头像</div>
       </div>
-
       <div class="profile-details">
         <p><strong>用户名:</strong> {{ authStore.user.username }}</p>
         <p><strong>邮箱:</strong> {{ authStore.user.email }}</p>
@@ -32,29 +31,22 @@
         <p><strong>注册时间:</strong> {{ formatDate(authStore.user.created_at) }}</p>
       </div>
     </div>
-
     <div v-else class="no-user-info">
-      <p>无法加载用户信息，或您未登录。</p>
-      <RouterLink to="/login">请先登录</RouterLink>
+        <p>无法加载用户信息，或您未登录。</p>
+        <RouterLink to="/login">请先登录</RouterLink>
     </div>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue';
-import {useAuthStore} from '@/stores/auth';
-import {RouterLink} from 'vue-router';
-import {formatDate} from '@/utils/formatters';
+import { ref, onMounted } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+import { RouterLink } from 'vue-router';
+import { formatDate } from '@/utils/formatters';
+import Avatar from '@/components/Avatar.vue';
 
 const authStore = useAuthStore();
 const pageTitle = ref('我的个人主页');
-
-
-// 图片加载失败时的处理
-function onAvatarError(event) {
-  event.target.style.display = 'none'; // 隐藏损坏的图片
-  // 或者替换为一张默认图片: event.target.src = '/path/to/default-avatar.png';
-}
 
 onMounted(async () => {
   // 如果已登录但store中没有用户信息，则尝试获取
@@ -65,6 +57,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+
+:deep(.mc-avatar) {
+  width: 128px;
+  height: 128px;
+  border: 2px solid var(--border-color);
+  image-rendering: pixelated; /* 保持像素感 */
+}
+
+
 .user-profile-view {
   padding: 30px 40px;
   max-width: 800px; /* 稍微加宽以容纳头像 */

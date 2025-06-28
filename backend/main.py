@@ -6,8 +6,9 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, List, Union  # 导入 Union 用于文件类型提示
-
+from typing import Optional, List  # 导入 Union 用于文件类型提示
+import json
+from fastapi import Request
 import cv2
 import httpx
 import uvicorn
@@ -18,14 +19,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqladmin import Admin
-from sqlmodel import SQLModel  # 确保导入 SQLModel
+from sqlalchemy.orm import selectinload
+from sqlmodel import SQLModel, select, desc  # 确保导入 SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import StreamingResponse
 
-from backend import crud
-from backend.admin import admin_views
-from backend.admin_auth import authentication_backend
+from backend import crud, models
 from backend.auth_utils import (
     get_password_hash,
     generate_email_verification_token,
@@ -40,8 +40,8 @@ from backend.auth_utils import (
 )
 from backend.core.config import get_settings, clear_settings_cache, Settings
 from backend.crud import get_friend_links
-from backend.database import get_async_session, sync_engine
-from backend.email_utils import send_verification_email, send_password_reset_email
+from backend.database import get_async_session
+from backend.email_utils import send_verification_email, send_password_reset_email, send_account_deletion_email
 from backend.models import (
     User,
     UserCreate,
@@ -53,12 +53,14 @@ from backend.models import (
     PasswordResetRequest,
     PasswordResetForm,
     GalleryItemCreate,
-    GalleryItemReadWithBuilder, Member, MemberRead, MemberCreate, MemberUpdate, FriendLinkRead, ItemType
+    GalleryItemReadWithBuilder, MemberRead, MemberCreate, MemberUpdate, FriendLinkRead, ItemType, UserRole
 )
 
 # --- 上传文件存储目录定义 ---
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
 
 # 配置日志记录器
 logging.basicConfig(
@@ -70,6 +72,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# --- 更健壮的路径定义 ---
+PROJECT_ROOT = Path(__file__).parent.parent
+UPLOAD_DIR = PROJECT_ROOT / "backend/uploads"
+SITE_CONFIG_PATH = PROJECT_ROOT / "frontend/public/site-config.json"
 
 # --- FastAPI 应用生命周期管理 ---
 @asynccontextmanager
@@ -91,15 +97,9 @@ class PublicConfig(BaseModel):
     project_name: str
 
 
-# --- Admin Panel Setup ---
-admin = Admin(app, sync_engine, authentication_backend=authentication_backend)
-
-# 注册所有视图
-for view in admin_views:
-    admin.add_view(view)
-
 # --- CORS 中间件设置 (在应用启动时读取一次配置) ---
 initial_settings = get_settings()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=initial_settings.cors_origins_list,
@@ -107,6 +107,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(
+    SessionMiddleware, secret_key=get_settings().SESSION_SECRET_KEY
+)
+
 
 # --- 静态文件服务 ---
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
@@ -401,6 +405,7 @@ def create_video_thumbnail(
 @app.post("/gallery/upload", response_model=GalleryItemReadWithBuilder, status_code=status.HTTP_201_CREATED,
           tags=GALLERY_TAGS)
 async def upload_gallery_item(
+        background_tasks: BackgroundTasks,
         title: str = File(...),
         builder_name: str = File(...),
         description: Optional[str] = File(None),
@@ -409,33 +414,23 @@ async def upload_gallery_item(
         current_user: User = Depends(get_current_active_user),
         settings: Settings = Depends(get_settings)
 ):
+    # 1. 文件类型和大小验证 (保持不变)
     if image.content_type not in settings.allowed_mime_types_list:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {image.content_type}.")
-
     max_file_size_bytes = settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
     if image.size > max_file_size_bytes:
         raise HTTPException(status_code=400, detail=f"文件过大，最大允许 {settings.UPLOAD_MAX_SIZE_MB}MB.")
 
-    item_type: ItemType
-    if image.content_type.startswith("video/"):
-        item_type = ItemType.VIDEO
-    else:
-        item_type = ItemType.IMAGE
-
-    file_extension = Path(image.filename).suffix.lower()
-    if not file_extension:
-        ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "video/mp4": ".mp4"}
-        file_extension = ext_map.get(image.content_type, ".dat")
-
+    # 2. 确定文件类型和文件名
+    item_type = ItemType.VIDEO if image.content_type.startswith("video/") else ItemType.IMAGE
+    file_extension = Path(image.filename).suffix.lower() or ".dat"
     unique_filename_base = str(uuid.uuid4())
     original_filename = f"{unique_filename_base}{file_extension}"
-    thumbnail_filename = f"{unique_filename_base}_thumb.jpg"
-
+    thumbnail_filename = f"{unique_filename_base}_thumb.jpg"  # 缩略图统一为 jpg
     original_file_location = UPLOAD_DIR / original_filename
     thumbnail_file_location = UPLOAD_DIR / thumbnail_filename
 
-    member = await crud.get_or_create_member(db=session, name=builder_name)
-
+    # 3. 保存原始文件
     try:
         with open(original_file_location, "wb+") as file_object:
             shutil.copyfileobj(image.file, file_object)
@@ -445,24 +440,20 @@ async def upload_gallery_item(
     finally:
         image.file.close()
 
-    thumbnail_url_to_store = None
-    if item_type == ItemType.IMAGE:
-        if create_image_thumbnail(original_file_location, thumbnail_file_location):
-            thumbnail_url_to_store = f"/uploads/{thumbnail_filename}"
-    elif item_type == ItemType.VIDEO:
-        if create_video_thumbnail(original_file_location, thumbnail_file_location):
-            thumbnail_url_to_store = f"/uploads/{thumbnail_filename}"
-
+    # 4. 准备画廊项目数据并存入数据库
+    member = await crud.get_or_create_member(db=session, name=builder_name)
     image_url_to_store = f"/uploads/{original_filename}"
+    thumbnail_url_to_store = f"/uploads/{thumbnail_filename}"  # 预设缩略图URL
 
     item_create_data = GalleryItemCreate(
         title=title,
         description=description,
         image_url=image_url_to_store,
-        thumbnail_url=thumbnail_url_to_store,
+        thumbnail_url=thumbnail_url_to_store,  # 先将URL存入数据库
         item_type=item_type
     )
 
+    # 存入数据库并立即返回响应，不再等待缩略图生成
     db_gallery_item = await crud.create_gallery_item(
         db=session,
         item_create=item_create_data,
@@ -470,8 +461,17 @@ async def upload_gallery_item(
         member_id=member.id
     )
 
+    # --- 5. 将耗时的缩略图生成任务添加到后台 ---
+    background_tasks.add_task(
+        process_thumbnail_in_background,
+        original_file_location,
+        thumbnail_file_location,
+        item_type
+    )
+
     await session.refresh(db_gallery_item, attribute_names=["builder"])
 
+    # 立即返回响应给用户
     return db_gallery_item
 
 
@@ -580,6 +580,185 @@ async def read_friend_links(db: AsyncSession = Depends(get_async_session)):
     """
     links = await get_friend_links(db)
     return links
+
+
+# --- 创建一个专门用于后台生成缩略图的函数 ---
+def process_thumbnail_in_background(
+    original_file_path: Path,
+    thumbnail_save_path: Path,
+    item_type: ItemType
+):
+    """
+    根据项目类型，在后台生成图片或视频的缩略图。
+    """
+    logger.info(f"后台任务开始: 为 {original_file_path} 生成缩略图...")
+    if item_type == ItemType.IMAGE:
+        create_image_thumbnail(original_file_path, thumbnail_save_path)
+    elif item_type == ItemType.VIDEO:
+        create_video_thumbnail(original_file_path, thumbnail_save_path)
+    logger.info(f"后台任务结束: 缩略图处理完成。")
+
+
+# --- V2: 自定义管理面板 API ---
+
+class AdminUserUpdate(SQLModel):
+    """用于管理员更新用户信息的模型"""
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+
+
+@app.get("/api/admin/users", response_model=List[UserRead], tags=["Admin Panel"])
+async def admin_get_users(
+        skip: int = 0,
+        limit: int = 100,
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user),
+):
+    """(管理员) 获取用户列表"""
+    users = await session.execute(select(User).offset(skip).limit(limit))
+    return users.scalars().all()
+
+
+@app.patch("/api/admin/users/{user_id}", response_model=UserRead, tags=["Admin Panel"])
+async def admin_update_user(
+        user_id: int,
+        user_update: AdminUserUpdate,  # <--- This should now work correctly
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user),
+):
+    """(管理员) 更新指定用户信息"""
+    db_user = await session.get(User, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="用户未找到")
+
+    # Use the specific CRUD function for admin updates
+    # Note: We can reuse the `admin_update_user_details` from crud.py if you created it,
+    # or just perform the logic here directly.
+    update_data = user_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+
+    db_user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    session.add(db_user)
+    await session.commit()
+    await session.refresh(db_user)
+    return db_user
+
+
+@app.delete("/api/admin/users/{user_id}", status_code=status.HTTP_200_OK, tags=["Admin Panel"])
+async def admin_delete_user(
+        user_id: int,
+        background_tasks: BackgroundTasks,
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user),
+):
+    """(管理员) 删除指定用户及其所有作品"""
+    if admin_user.id == user_id:
+        raise HTTPException(status_code=400, detail="管理员不能删除自己。")
+
+    # 使用 CRUD 函数执行删除操作
+    deleted_user = await crud.delete_user_by_id(db=session, user_id=user_id)
+
+    if not deleted_user:
+        raise HTTPException(status_code=404, detail="用户未找到")
+
+    # 在后台发送邮件通知
+    background_tasks.add_task(
+        send_account_deletion_email,
+        email_to=deleted_user.email,
+        username=deleted_user.username
+    )
+
+    return {"message": f"用户 {deleted_user.username} 已被成功删除。"}
+
+
+# --- 画廊管理 API ---
+
+@app.get("/api/admin/gallery-items", response_model=List[GalleryItemReadWithBuilder], tags=["Admin Panel"])
+async def admin_get_gallery_items(
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_async_session),
+    admin_user: User = Depends(get_current_admin_user),
+):
+    """(管理员) 获取所有画廊作品的列表"""
+    result = await session.execute(
+        select(models.GalleryItem)
+        .options(
+            selectinload(models.GalleryItem.builder),
+            selectinload(models.GalleryItem.uploader)
+        )
+        .order_by(desc(models.GalleryItem.uploaded_at))
+        .offset(skip)
+        .limit(limit)
+    )
+    return result.scalars().all()
+
+
+@app.delete("/api/admin/gallery-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin Panel"])
+async def admin_delete_gallery_item(
+    item_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    admin_user: User = Depends(get_current_admin_user),
+):
+    """(管理员) 删除指定的画廊作品"""
+    db_item = await session.get(models.GalleryItem, item_id)
+    if not db_item:
+        raise HTTPException(status_code=404, detail="画廊作品未找到")
+
+    # 在删除数据库记录前，先删除关联的物理文件
+    try:
+        # UPLOAD_DIR 已在文件顶部定义
+        if db_item.image_url:
+            image_path = UPLOAD_DIR / Path(db_item.image_url).name
+            if image_path.is_file():
+                image_path.unlink()
+        if db_item.thumbnail_url:
+            thumb_path = UPLOAD_DIR / Path(db_item.thumbnail_url).name
+            if thumb_path.is_file():
+                thumb_path.unlink()
+    except Exception as e:
+        # 即使文件删除失败，也应继续删除数据库记录，但要记录错误
+        logger.error(f"删除作品 {item_id} 的文件时出错: {e}")
+
+    await session.delete(db_item)
+    await session.commit()
+    return
+
+
+# --- 站点配置管理 API ---
+
+@app.get("/api/admin/site-config", response_model=dict, tags=["Admin Panel"])
+async def admin_get_site_config(admin_user: User = Depends(get_current_admin_user)):
+    if not SITE_CONFIG_PATH.exists():
+        raise HTTPException(status_code=404, detail="site-config.json not found")
+    try:
+        with open(SITE_CONFIG_PATH, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+            if not content:
+                return {}
+            return json.loads(content)
+    except Exception as e:
+        logger.error(f"读取或解析 site-config.json 时发生错误: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"读取配置文件时发生未知服务器错误。")
+
+
+@app.post("/api/admin/site-config", status_code=status.HTTP_200_OK, tags=["Admin Panel"])
+async def admin_update_site_config(
+    request: Request,
+    admin_user: User = Depends(get_current_admin_user),
+):
+    try:
+        new_config = await request.json()
+        with open(SITE_CONFIG_PATH, "w", encoding="utf-8") as f: # 写入时用 utf-8 即可，它不会主动加BOM
+            json.dump(new_config, f, ensure_ascii=False, indent=2)
+        return {"message": "站点配置已成功更新！"}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="提供的内容不是有效的JSON格式。")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存文件时发生错误: {e}")
+
 
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---
