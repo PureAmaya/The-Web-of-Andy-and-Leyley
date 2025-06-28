@@ -1,11 +1,93 @@
 ﻿# backend/core/config.py
+import logging
+import secrets
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr, validator
 from pathlib import Path
 from typing import List, Optional  # 确保导入 List, Optional
 
 ENV_PATH = Path(__file__).parent.parent / ".env"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+logger = logging.getLogger(__name__)
 
+
+# --- 2. 定义默认 .env 文件的模板内容 ---
+# 注意：密钥部分使用了 {变量名} 作为占位符
+DEFAULT_ENV_CONTENT = """
+# =========================================================================
+#  这是一个自动生成的 .env 配置文件。
+#  请根据你的实际情况修改数据库和邮件服务器的配置。
+#  所有 SECRET KEY 都已自动生成为安全随机值，建议直接使用。
+# =========================================================================
+
+# --- PostgreSQL 数据库配置 ---
+POSTGRES_USER="your_db_user"
+POSTGRES_PASSWORD="your_db_password"
+POSTGRES_SERVER="localhost"
+POSTGRES_PORT=5432
+POSTGRES_DB="leyley_mc_db"
+
+# --- 应用密钥 (自动生成) ---
+JWT_SECRET_KEY="{jwt_secret}"
+JWT_REFRESH_SECRET_KEY="{jwt_refresh_secret}"
+EMAIL_VERIFICATION_SECRET_KEY="{email_verification_secret}"
+EMAIL_VERIFICATION_SALT="{email_verification_salt}"
+PASSWORD_RESET_SECRET_KEY="{password_reset_secret}"
+PASSWORD_RESET_SALT="{password_reset_salt}"
+SESSION_SECRET_KEY="{session_secret}"
+
+# --- 邮件服务器配置 (示例) ---
+MAIL_USERNAME="noreply@example.com"
+MAIL_PASSWORD="your_email_password"
+MAIL_FROM="noreply@example.com"
+MAIL_SERVER="smtp.example.com"
+MAIL_PORT=465
+MAIL_FROM_NAME="安迪和莉莉的网站"
+MAIL_STARTTLS=False
+MAIL_SSL_TLS=True
+
+# --- 应用行为 ---
+PORTAL_FRONTEND_BASE_URL="http://localhost:5173"
+ENABLE_REGISTRATION=true
+CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+UPLOAD_MAX_SIZE_MB=50
+GALLERY_DEFAULT_PAGE_SIZE=12
+GALLERY_MAX_PAGE_SIZE=100
+MC_AVATAR_URL_TEMPLATE="https://cravatar.eu/avatar/{{username}}/128.png"
+"""
+
+def generate_default_env_if_missing():
+    """
+    检查 .env 文件是否存在。如果不存在，则创建一个包含默认值和新生成密钥的文件。
+    """
+    if not ENV_PATH.exists():
+        logger.warning(f"警告: 在路径 {ENV_PATH} 未找到 .env 文件。正在创建默认配置文件...")
+
+        # 为所有密钥生成新的安全随机值
+        generated_secrets = {
+            "jwt_secret": secrets.token_hex(32),
+            "jwt_refresh_secret": secrets.token_hex(32),
+            "email_verification_secret": secrets.token_hex(32),
+            "email_verification_salt": secrets.token_hex(16),
+            "password_reset_secret": secrets.token_hex(32),
+            "password_reset_salt": secrets.token_hex(16),
+            "session_secret": secrets.token_hex(32),
+        }
+
+        # 将生成的密钥填入模板
+        content = DEFAULT_ENV_CONTENT.format(**generated_secrets)
+
+        try:
+            with open(ENV_PATH, "w", encoding="utf-8") as f:
+                f.write(content.strip() + '\n')
+            logger.info(f"成功创建默认的 .env 文件于: {ENV_PATH}")
+            logger.warning("重要提示: 请打开新生成的 .env 文件，并更新你的数据库和邮件服务器配置信息！")
+        except IOError as e:
+            logger.error(f"创建 .env 文件失败: {e}")
+
+# --- 4. 在模块加载时立即执行这个检查 ---
+generate_default_env_if_missing()
 
 # --- 添加调试打印 ---
 print(f"DEBUG: [config.py] __file__ is: {__file__}")
