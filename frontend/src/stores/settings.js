@@ -116,25 +116,26 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     async function initialize() {
-        // --- 核心修正：尝试加载远程配置，如果失败则加载本地默认配置 ---
+        // 2. 尝试从 /public 目录加载远程配置
         try {
             const response = await fetch('/site-config.json');
             if (!response.ok) {
-                // 如果文件不存在或加载失败 (e.g., 404)
-                throw new Error('Failed to fetch config, using default.');
+                // 如果文件不存在 (404)，则抛出错误，进入catch块
+                throw new Error('Failed to fetch config, will use default.');
             }
             const config = await response.json();
             loadConfig(config);
         } catch (error) {
+            // 3. 如果加载失败，则加载内置的默认配置
             console.warn('无法加载 site-config.json，已使用内置的默认配置。', error.message);
-            loadConfig(DEFAULT_SITE_CONFIG); // <-- 加载备用配置
+            loadConfig(DEFAULT_SITE_CONFIG);
         }
 
-        // 之后再加载依赖于 apiBaseUrl 的后端配置
+        // 4. 之后再加载依赖于 apiBaseUrl 的后端配置
         try {
             const publicConfig = await apiClient.get('/config/public');
             isRegistrationEnabled.value = publicConfig.enable_registration;
-        } catch (error) {
+        } catch(error) {
             console.error("无法从后端加载公共配置:", error);
         }
 
