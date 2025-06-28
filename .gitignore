@@ -275,3 +275,4 @@ frontend/.vscode/*
 # self
 backend/portal_app.db
 gemini.md
+frontend/public/site-config.json
