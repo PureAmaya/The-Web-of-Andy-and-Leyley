@@ -7,8 +7,7 @@
     一个基于 Vue.js 和 FastAPI 构建的全栈社区门户网站，灵感来源于《安迪和莉莉的棺材》的独特艺术风格。
   </p>
   <p>
-    <a href="https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley/releases"><img alt="Version" src="https://img.shields.io/github/v/release/PureAmaya/The-Web-of-Andy-and-Leyley?style=for-the-badge&logo=github"></a>
-    <a href="https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PureAmaya/The-Web-of-Andy-and-Leyley?style=for-the-badge"></a>
+    <a href="https://github.com/PureAmaya/The-Web-of-Andy-and-Leyley/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PureAmaya/The-Web-of-Andy-and-Leyley"></a>
   </p>
 </div>
 *本项目与《安迪和莉莉的棺材》（The Coffin of Andy and Leyley）游戏本身无任何关联，为爱好者二次创作作品。*
