@@ -73,12 +73,21 @@ input, textarea, button, select {
 }
 
 button, .form-button, .api-button {
-    text-transform: none; /* 取消大写，手写风格字体小写更好看 */
-    font-family: var(--font-special); /* 按钮也使用特殊字体 */
-    border-width: 2px;
-    padding: 8px 16px;
-}
+    padding: 10px 18px;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    font-family: var(--font-main);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 
+    /* 默认按钮样式：深色背景，亮色文字 */
+    background-color: var(--secondary-bg-color);
+    border: 1px solid var(--border-color);
+    /* 修改这里：使用新的变量 */
+    color: var(--button-light-bg-text-color);
+}
 
 /* 输入框、文本域样式调整 */
 input[type="text"],
@@ -95,6 +104,7 @@ textarea {
     transition: border-color 0.2s ease, box-shadow 0.2s ease; /* 添加过渡效果 */
 }
 
+
 input[type="text"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus,
@@ -106,30 +116,31 @@ textarea:focus {
 
 /* 按钮基础样式调整 */
 button, .form-button, .api-button {
-    padding: 10px 18px; /* 调整padding */
+    padding: 10px 18px;
     border-radius: 0;
     cursor: pointer;
     transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    font-family: var(--font-main); /* 确保按钮也使用主题字体 */
-    font-weight: bold; /* 按钮文字可以加粗一些 */
-    text-transform: uppercase; /* 文字大写，增加游戏UI感 */
-    letter-spacing: 0.5px; /* 轻微增加字间距 */
+    font-family: var(--font-main);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 
-    /* 默认按钮样式：深色背景，亮色文字 */
+    /* 默认按钮样式 (适用于浅色背景) */
     background-color: var(--secondary-bg-color);
-    border: 1px solid var(--border-color); /* 默认边框 */
-    color: var(--button-text-color); /* 使用专门的按钮文字颜色 */
-    /* box-shadow: var(--game-box-shadow); /* 尝试添加游戏风格阴影 */
+    border: 1px solid var(--border-color);
+    /* 关键修复：直接使用 main-text-color，它在不同主题下颜色是正确的 */
+    color: var(--main-text-color);
 }
+
 
 button:hover:not(:disabled),
 .form-button:hover:not(:disabled),
 .api-button:hover:not(:disabled) {
-    background-color: var(--border-color); /* 悬停时加深背景 */
-    border-color: var(--primary-accent-color); /* 悬停时强调边框 */
-    transform: translateY(-1px); /* 轻微上移 */
-    /* box-shadow: 4px 4px 0px #000; /* 悬停时阴影变化 */
+    background-color: var(--border-color);
+    border-color: var(--primary-accent-color);
+    transform: translateY(-1px);
 }
+
 
 button:active:not(:disabled),
 .form-button:active:not(:disabled),
@@ -165,3 +176,31 @@ button:disabled,
   text-shadow: 0 0 5px var(--primary-accent-color);
 }
 
+
+/* 新增：自定义滚动条样式 */
+/* 适用于 Webkit 浏览器 (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 12px; /* 滚动条宽度 */
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--main-bg-color); /* 滚动条轨道颜色 */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color); /* 滚动条滑块颜色 */
+  border-radius: 10px;
+  border: 3px solid var(--main-bg-color); /* 创建边距效果 */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-accent-color); /* 鼠标悬浮时滑块颜色 */
+}
+
+/* 适用于 Firefox */
+/* Firefox 仅支持有限的滚动条样式 */
+* {
+  scrollbar-width: thin; /* 'auto', 'thin', 'none' */
+  scrollbar-color: var(--border-color) var(--main-bg-color); /* 滑块颜色 轨道颜色 */
+}

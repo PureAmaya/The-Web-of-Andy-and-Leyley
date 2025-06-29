@@ -139,11 +139,10 @@ async function handleLogin() {
 
 /* 按钮样式主要继承自 main.css */
 .form-button {
-  /* 继承了 main.css 的大部分样式 */
   width: 100%;
-  background-color: #e589a0; /* 主要行动按钮使用强调色 */
-  border-color: #e589a0; /* 比强调色稍暗的边框 */
-  color: var(--button-text-color); /* 确保文字颜色高对比 */
+  background-color: #e589a0;
+  border-color: #e589a0;
+  color: var(--button-text-color);
 }
 
 .form-button:hover:not(:disabled) {

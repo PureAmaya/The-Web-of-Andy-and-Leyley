@@ -20,19 +20,19 @@
         >
           <img
             v-if="item.item_type === 'image'"
-            :src="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : 'https://via.placeholder.com/400x300.png?text=Image'"
+            :src="getFullImageUrl(item.thumbnail_url, item.title, settingsStore.apiBaseUrl)"
             :alt="item.title"
             class="gallery-media"
             loading="lazy"
           />
           <video
             v-else-if="item.item_type === 'video'"
-            :poster="item.thumbnail_url ? `${settingsStore.apiBaseUrl}${item.thumbnail_url}` : ''"
+            :poster="getFullImageUrl(item.thumbnail_url, item.title, settingsStore.apiBaseUrl)"
             class="gallery-media"
             muted
             preload="metadata"
           >
-            <source :src="`${settingsStore.apiBaseUrl}${item.image_url}`" type="video/mp4">
+            <source :src="getFullImageUrl(item.image_url, item.title, settingsStore.apiBaseUrl)" type="video/mp4">
             您的浏览器不支持 Video 标签。
           </video>
           <div v-if="item.item_type === 'video'" class="video-play-icon">▶</div>
@@ -64,51 +64,11 @@
       目前还没有画廊项目。
     </div>
 
-    <div v-if="selectedItemForLightbox" class="lightbox-overlay" @click.self="closeLightbox">
-      <div class="lightbox-content">
-        <img
-          v-if="selectedItemForLightbox.item_type === 'image'"
-          :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
-          :alt="selectedItemForLightbox.title"
-          class="lightbox-media"
-        />
-        <video
-          v-else-if="selectedItemForLightbox.item_type === 'video'"
-          :src="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
-          class="lightbox-media"
-          controls
-          autoplay
-          loop
-        >
-          您的浏览器不支持 Video 标签。
-        </video>
-
-        <div class="lightbox-details">
-            <h2>{{ selectedItemForLightbox.title }}</h2>
-            <p v-if="selectedItemForLightbox.description" class="lightbox-description">
-              {{ selectedItemForLightbox.description }}
-            </p>
-            <div class="lightbox-meta">
-              <p v-if="selectedItemForLightbox.builder">
-                <strong>创作者:</strong> {{ selectedItemForLightbox.builder.name }}
-              </p>
-              <p v-if="selectedItemForLightbox.uploader">
-                <strong>上传者:</strong> {{ selectedItemForLightbox.uploader.username }}
-              </p>
-            </div>
-            <a
-              :href="`${settingsStore.apiBaseUrl}${selectedItemForLightbox.image_url}`"
-              :download="getDownloadFilename(selectedItemForLightbox)"
-              class="download-button"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              下载原文件
-            </a>
-        </div>
-        <button @click="closeLightbox" class="close-button" aria-label="关闭">&times;</button>
-      </div>
-    </div>
+    <Lightbox
+        :selectedItem="selectedItemForLightbox"
+        :apiBaseUrl="settingsStore.apiBaseUrl"
+        @close="closeLightbox"
+    />
   </div>
 </template>
 
@@ -116,7 +76,7 @@
 import { ref, onMounted } from 'vue';
 import apiClient from '@/api';
 import { useSettingsStore } from '@/stores/settings';
-import Lightbox from '@/components/Lightbox.vue';
+import { getFullImageUrl } from '@/utils/imageUtils';
 
 const settingsStore = useSettingsStore();
 
@@ -161,6 +121,21 @@ function showFullImage(item) {
 function closeLightbox() {
   selectedItemForLightbox.value = null;
 }
+
+
+
+const getDownloadFilename = (item) => {
+  if (!item || !item.image_url) return 'download';
+  // 从URL中提取文件名，并替换为标题
+  const originalFilename = item.image_url.split('/').pop();
+  const extension = originalFilename.split('.').pop();
+  // 生成一个更友好的文件名，例如 "作品标题.mp4"
+  return `${item.title.replace(/[/\\?%*:|"<>]/g, '-')}.${extension}`;
+};
+
+onMounted(() => {
+  fetchGalleryItems();
+});
 
 
 </script>

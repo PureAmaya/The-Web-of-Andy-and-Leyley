@@ -292,6 +292,7 @@ class MemberRead(MemberBase):
 
 
 class MemberUpdate(SQLModel):
+    name: Optional[str] = None
     role: Optional[str] = None
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
@@ -402,6 +403,7 @@ class AdminUserUpdate(SQLModel):
     """
     A model for what an admin can update on a user's profile.
     """
+    username: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None

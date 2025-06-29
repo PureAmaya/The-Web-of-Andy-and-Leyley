@@ -71,6 +71,7 @@
 import { ref, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useSettingsStore } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
 import apiClient from '@/api';
 import Lightbox from '@/components/Lightbox.vue';
 import MemberModal from '@/components/MemberModal.vue';
@@ -78,6 +79,7 @@ import TeamMemberCard from '@/components/TeamMemberCard.vue';
 import { getFullImageUrl } from '@/utils/imageUtils';
 
 const settingsStore = useSettingsStore();
+const authStore = useAuthStore();
 
 const teamMembers = ref([]);
 const galleryItems = ref([]);
@@ -119,6 +121,10 @@ const openMemberModal = (member) => {
 const closeMemberModal = () => {
   isModalOpen.value = false;
 };
+
+const refreshMembers = () => {
+  fetchMembers();
+}
 
 function showItemInLightbox(item) {
   selectedItemForLightbox.value = item;
@@ -253,4 +259,16 @@ function closeLightbox() {
 .error-message {
     color: var(--primary-accent-color);
 }
+
+
+@media (max-width: 768px) {
+  .content-section {
+    padding: 2rem 1rem; /* 在手机上减小垂直和水平内边距 */
+  }
+
+  .section-title {
+    font-size: 2rem;
+  }
+}
+
 </style>

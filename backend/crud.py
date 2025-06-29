@@ -1,5 +1,9 @@
 ﻿# backend/crud.py
 import datetime
+import logging
+from pathlib import Path
+
+from fastapi import HTTPException, status
 from typing import List, Optional, Tuple, Union
 
 from sqlalchemy import func, desc, update
@@ -9,6 +13,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend import models
 from backend.auth_utils import get_password_hash
+
+UPLOAD_DIR = Path(__file__).parent / "uploads"
+logger = logging.getLogger(__name__)
 
 
 # --- User CRUD ---
@@ -60,11 +67,28 @@ async def create_user(db: AsyncSession, user_create: models.UserCreate) -> model
 
 
 async def update_user(db: AsyncSession, user: models.User, user_update: models.UserUpdate) -> models.User:
+    """
+    普通用户更新自己的信息，并同步到关联的 Member。
+    """
     update_data = user_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(user, key, value)
     user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(user)
+
+    # --- 同步逻辑开始 ---
+    # 尝试查找与此用户同名的核心成员
+    member_to_sync = await get_member_by_name(db, user.username)
+    if member_to_sync:
+        # 如果找到了，就更新其 bio 和 avatar_url
+        if "bio" in update_data:
+            member_to_sync.bio = update_data["bio"]
+        if "avatar_url" in update_data:
+            member_to_sync.avatar_url = update_data["avatar_url"]
+        member_to_sync.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        db.add(member_to_sync)
+    # --- 同步逻辑结束 ---
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -157,15 +181,42 @@ async def get_all_members(db: AsyncSession) -> List[models.Member]:
 
 
 async def update_member(db: AsyncSession, member: models.Member, member_update: models.MemberUpdate) -> models.Member:
+    """
+    更新核心成员信息，并同步到关联的 User。
+    """
     update_data = member_update.model_dump(exclude_unset=True)
+
+    # 检查名称冲突
+    if "name" in update_data and update_data["name"] != member.name:
+        existing_member = await get_member_by_name(db, update_data["name"])
+        if existing_member:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"成员名称 '{update_data['name']}' 已被使用。"
+            )
+
+    # 更新 Member
     for key, value in update_data.items():
         setattr(member, key, value)
     member.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(member)
+
+    # --- 同步逻辑开始 ---
+    # 使用更新后的名称来查找对应的用户
+    new_name = update_data.get("name", member.name)
+    user_to_sync = await get_user_by_username(db, new_name)
+    if user_to_sync:
+        if "bio" in update_data:
+            user_to_sync.bio = update_data["bio"]
+        if "avatar_url" in update_data:
+            user_to_sync.avatar_url = update_data["avatar_url"]
+        user_to_sync.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        db.add(user_to_sync)
+    # --- 同步逻辑结束 ---
+
     await db.commit()
     await db.refresh(member)
     return member
-
 
 async def delete_member(db: AsyncSession, member: models.Member):
     """
@@ -270,12 +321,38 @@ async def admin_get_all_users(db: AsyncSession, skip: int = 0, limit: int = 100)
     return result.scalars().all()
 
 async def admin_update_user_details(db: AsyncSession, user: models.User, update_data: models.AdminUserUpdate) -> models.User:
-    """管理员更新用户信息"""
+    """
+    管理员更新用户信息，并同步到关联的 Member。
+    """
     patch_data = update_data.model_dump(exclude_unset=True)
+
+    # 检查用户名冲突
+    if "username" in patch_data and patch_data["username"] != user.username:
+        existing_user = await get_user_by_username(db, patch_data["username"])
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"用户名 '{patch_data['username']}' 已被使用。"
+            )
+
+    # 更新 User
     for key, value in patch_data.items():
         setattr(user, key, value)
     user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(user)
+
+    # --- 同步逻辑开始 ---
+    # 使用更新后的用户名来查找对应的核心成员
+    new_username = patch_data.get("username", user.username)
+    member_to_sync = await get_member_by_name(db, new_username)
+    if member_to_sync:
+        if "bio" in patch_data:
+            member_to_sync.bio = patch_data["bio"]
+        # 注意：我们这里不反向同步 avatar_url，因为成员头像通常是独立的
+        member_to_sync.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        db.add(member_to_sync)
+    # --- 同步逻辑结束 ---
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -283,18 +360,29 @@ async def admin_update_user_details(db: AsyncSession, user: models.User, update_
 
 async def delete_user_by_id(db: AsyncSession, user_id: int) -> Optional[models.User]:
     """
-    通过ID删除用户，并级联删除其所有关联记录（作品、令牌等）。
+    通过ID删除用户，并级联删除其所有关联记录及文件。
     返回被删除的用户对象，如果未找到则返回 None。
     """
-    # 首先获取用户对象，以便后续返回其信息用于发送邮件
     user_to_delete = await db.get(models.User, user_id)
     if not user_to_delete:
         return None
 
-    # 1. 删除关联的画廊作品
+    # 1. 删除关联的画廊作品及其物理文件
     gallery_items_stmt = select(models.GalleryItem).where(models.GalleryItem.user_id == user_id)
     for item in (await db.execute(gallery_items_stmt)).scalars().all():
-        # 如果有物理文件，也应该在这里加入删除逻辑
+        # 【核心修改】新增物理文件删除逻辑
+        try:
+            if item.image_url:
+                image_path = UPLOAD_DIR / Path(item.image_url).name
+                if image_path.is_file():
+                    image_path.unlink()
+            if item.thumbnail_url:
+                thumb_path = UPLOAD_DIR / Path(item.thumbnail_url).name
+                if thumb_path.is_file():
+                    thumb_path.unlink()
+        except Exception as e:
+            logger.error(f"删除用户时，删除作品 {item.id} 的文件失败: {e}")
+
         await db.delete(item)
 
     # 2. 删除关联的邮件验证令牌 (修复本次报错的关键)
@@ -312,5 +400,46 @@ async def delete_user_by_id(db: AsyncSession, user_id: int) -> Optional[models.U
     await db.commit()
 
     return user_to_delete
+
+
+async def admin_get_paginated_users(db: AsyncSession, page: int, page_size: int) -> Tuple[int, List[models.User]]:
+    """分页获取所有用户的列表"""
+    offset = (page - 1) * page_size
+
+    total_stmt = select(func.count(models.User.id))
+    total_result = await db.execute(total_stmt)
+    total = total_result.scalar_one()
+
+    items_stmt = select(models.User).order_by(models.User.id).offset(offset).limit(page_size)
+    items_result = await db.execute(items_stmt)
+    items = items_result.scalars().all()
+
+    return total, items
+
+
+async def admin_get_paginated_gallery_items(db: AsyncSession, page: int, page_size: int) -> Tuple[
+    int, List[models.GalleryItem]]:
+    """分页获取所有画廊作品的列表"""
+    offset = (page - 1) * page_size
+
+    total_stmt = select(func.count(models.GalleryItem.id))
+    total_result = await db.execute(total_stmt)
+    total = total_result.scalar_one()
+
+    items_stmt = (
+        select(models.GalleryItem)
+        .options(
+            selectinload(models.GalleryItem.builder),
+            selectinload(models.GalleryItem.uploader)
+        )
+        .order_by(desc(models.GalleryItem.uploaded_at))
+        .offset(offset)
+        .limit(page_size)
+    )
+    items_result = await db.execute(items_stmt)
+    items = items_result.scalars().all()
+
+    return total, items
+
 
 

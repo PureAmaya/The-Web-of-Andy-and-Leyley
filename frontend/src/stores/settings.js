@@ -33,21 +33,41 @@ const lightThemeColors = {
     '--link-color': '#5a4f45',
     '--link-hover-color': '#8c4343',
     '--primary-accent-color': '#8c4343',
-    '--button-text-color': '#f4f1e9',
+    '--button-text-color': '#f4f1e9', // 用于深色/彩色背景的按钮
+    '--button-light-bg-text-color': '#3d352e', // 用于浅色背景的按钮
     '--secondary-accent-color': '#38761d',
+
+    // 覆盖 base.css 的变量
+    '--color-background': 'var(--main-bg-color)',
+    '--color-background-soft': '#fdfbf5',
+    '--color-background-mute': '#e8e3d9',
+    '--color-border': 'var(--border-color)',
+    '--color-border-hover': '#a99d91',
+    '--color-heading': '#3d352e',
+    '--color-text': 'var(--main-text-color)',
 };
 
 // 定义夜间模式的颜色主题变量
 const darkThemeColors = {
-    '--main-bg-color': '#121212',
-    '--secondary-bg-color': '#1E1E1E',
-    '--main-text-color': '#E0E0E0',
-    '--border-color': '#333333',
-    '--link-color': '#BBBBBB',
-    '--link-hover-color': '#FFFFFF',
-    '--primary-accent-color': '#B71C1C',
-    '--button-text-color': '#FFFFFF',
+    '--main-bg-color': '#1a1a1a',
+    '--secondary-bg-color': '#2b2b2b',
+    '--main-text-color': '#e0e0e0',
+    '--border-color': '#444',
+    '--link-color': '#c0c0c0',
+    '--link-hover-color': '#ffffff',
+    '--primary-accent-color': '#7f0000',
+    '--button-text-color': '#f0f0f0', // 用于深色/彩色背景的按钮
+    '--button-light-bg-text-color': '#e0e0e0', // 在夜间模式下，浅色背景按钮也使用浅色文字
     '--secondary-accent-color': '#38761d',
+
+    // 覆盖 base.css 的变量
+    '--color-background': 'var(--main-bg-color)',
+    '--color-background-soft': '#222222',
+    '--color-background-mute': '#282828',
+    '--color-border': 'var(--border-color)',
+    '--color-border-hover': '#545454',
+    '--color-heading': '#ffffff',
+    '--color-text': 'var(--main-text-color)',
 };
 
 

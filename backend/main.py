@@ -5,6 +5,7 @@ import shutil
 import sys
 import uuid
 from contextlib import asynccontextmanager
+from math import ceil
 from pathlib import Path
 from typing import Optional, List  # 导入 Union 用于文件类型提示
 import json
@@ -59,7 +60,8 @@ from backend.models import (
 # --- 上传文件存储目录定义 ---
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
+AVATARS_DIR = UPLOAD_DIR / "avatars"
+AVATARS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # 配置日志记录器
@@ -91,6 +93,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- 定义新的分页响应模型 ---
+class PaginatedUsers(SQLModel):
+    total_items: int
+    total_pages: int
+    page: int
+    page_size: int
+    items: List[UserRead]
+
+class PaginatedAdminGallery(SQLModel):
+    total_items: int
+    total_pages: int
+    page: int
+    page_size: int
+    items: List[GalleryItemReadWithBuilder]
 
 class PublicConfig(BaseModel):
     enable_registration: bool
@@ -550,13 +566,74 @@ async def get_all_members(session: AsyncSession = Depends(get_async_session)):
     return await crud.get_all_members(db=session)
 
 
-@app.patch("/members/{member_id}", response_model=MemberRead, tags=MEMBERS_TAGS)
-async def update_member(member_id: int, member_update: MemberUpdate, session: AsyncSession = Depends(get_async_session),
-                        current_user: User = Depends(get_current_active_user)):
+@app.patch("/members/{member_id}", response_model=MemberRead, tags=["Members"])
+async def update_member_self(member_id: int, member_update: models.MemberUpdate,
+                             session: AsyncSession = Depends(get_async_session),
+                             current_user: User = Depends(get_current_active_user)):
+    db_member = await crud.get_member_by_id(db=session, member_id=member_id)
+    if not db_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
+    # 关键安全检查：确保当前登录用户只能修改与自己用户名同名的成员
+    if db_member.name != current_user.username:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权修改此成员信息")
+
+    return await crud.update_member(db=session, member=db_member, member_update=member_update)
+
+
+@app.get("/api/admin/members", response_model=List[MemberRead], tags=["Admin Panel"])
+async def admin_get_members(
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user)
+):
+    """(管理员) 获取所有核心成员的完整列表"""
+    return await crud.get_all_members(db=session)
+
+
+@app.post("/api/admin/members", response_model=MemberRead, tags=["Admin Panel"], status_code=status.HTTP_201_CREATED)
+async def admin_create_member(
+        member_data: MemberCreate,
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user)
+):
+    """(管理员) 创建一个新的核心成员"""
+    if await crud.get_member_by_name(db=session, name=member_data.name):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该名称的成员已存在")
+
+    # crud.create_member 函数需要被创建或修改
+    # 假设我们创建一个新的 crud 函数 admin_create_member
+    db_member = await crud.get_or_create_member(db=session, name=member_data.name)
+    # 更新其他信息
+    return await crud.update_member(db=session, member=db_member,
+                                    member_update=models.MemberUpdate(**member_data.model_dump()))
+
+
+@app.patch("/api/admin/members/{member_id}", response_model=MemberRead, tags=["Admin Panel"])
+async def admin_update_member(
+        member_id: int,
+        member_update: models.MemberUpdate,
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user)
+):
+    """(管理员) 更新指定核心成员的信息"""
     db_member = await crud.get_member_by_id(db=session, member_id=member_id)
     if not db_member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
     return await crud.update_member(db=session, member=db_member, member_update=member_update)
+
+
+
+@app.delete("/api/admin/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin Panel"])
+async def admin_delete_member(
+        member_id: int,
+        session: AsyncSession = Depends(get_async_session),
+        admin_user: User = Depends(get_current_admin_user)
+):
+    """(管理员) 删除指定核心成员"""
+    db_member = await crud.get_member_by_id(db=session, member_id=member_id)
+    if not db_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="成员未找到")
+    await crud.delete_member(db=session, member=db_member)
+    return
 
 
 @app.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, tags=MEMBERS_TAGS)
@@ -608,16 +685,24 @@ class AdminUserUpdate(SQLModel):
     is_verified: Optional[bool] = None
 
 
-@app.get("/api/admin/users", response_model=List[UserRead], tags=["Admin Panel"])
+@app.get("/api/admin/users", response_model=PaginatedUsers, tags=["Admin Panel"])
 async def admin_get_users(
-        skip: int = 0,
-        limit: int = 100,
         session: AsyncSession = Depends(get_async_session),
         admin_user: User = Depends(get_current_admin_user),
+        page: int = Query(1, ge=1),
+        page_size: int = Query(10, ge=1, le=100)
 ):
-    """(管理员) 获取用户列表"""
-    users = await session.execute(select(User).offset(skip).limit(limit))
-    return users.scalars().all()
+    """(管理员) 分页获取用户列表"""
+    total_users, users = await crud.admin_get_paginated_users(db=session, page=page, page_size=page_size)
+    total_pages = ceil(total_users / page_size)
+
+    return PaginatedUsers(
+        total_items=total_users,
+        total_pages=total_pages,
+        page=page,
+        page_size=page_size,
+        items=users
+    )
 
 
 @app.patch("/api/admin/users/{user_id}", response_model=UserRead, tags=["Admin Panel"])
@@ -675,25 +760,24 @@ async def admin_delete_user(
 
 # --- 画廊管理 API ---
 
-@app.get("/api/admin/gallery-items", response_model=List[GalleryItemReadWithBuilder], tags=["Admin Panel"])
+@app.get("/api/admin/gallery-items", response_model=PaginatedAdminGallery, tags=["Admin Panel"])
 async def admin_get_gallery_items(
-    skip: int = 0,
-    limit: int = 100,
     session: AsyncSession = Depends(get_async_session),
     admin_user: User = Depends(get_current_admin_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100)
 ):
-    """(管理员) 获取所有画廊作品的列表"""
-    result = await session.execute(
-        select(models.GalleryItem)
-        .options(
-            selectinload(models.GalleryItem.builder),
-            selectinload(models.GalleryItem.uploader)
-        )
-        .order_by(desc(models.GalleryItem.uploaded_at))
-        .offset(skip)
-        .limit(limit)
+    """(管理员) 分页获取所有画廊作品的列表"""
+    total_items, items = await crud.admin_get_paginated_gallery_items(db=session, page=page, page_size=page_size)
+    total_pages = ceil(total_items / page_size)
+
+    return PaginatedAdminGallery(
+        total_items=total_items,
+        total_pages=total_pages,
+        page=page,
+        page_size=page_size,
+        items=items
     )
-    return result.scalars().all()
 
 
 @app.delete("/api/admin/gallery-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin Panel"])
@@ -746,20 +830,71 @@ async def admin_get_site_config(admin_user: User = Depends(get_current_admin_use
 
 @app.post("/api/admin/site-config", status_code=status.HTTP_200_OK, tags=["Admin Panel"])
 async def admin_update_site_config(
-    request: Request,
-    admin_user: User = Depends(get_current_admin_user),
+        request: Request,
+        admin_user: User = Depends(get_current_admin_user),
 ):
     try:
         new_config = await request.json()
-        with open(SITE_CONFIG_PATH, "w", encoding="utf-8") as f: # 写入时用 utf-8 即可，它不会主动加BOM
+        # 使用 utf-8 编码写入，确保跨平台兼容性
+        with open(SITE_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(new_config, f, ensure_ascii=False, indent=2)
-        return {"message": "站点配置已成功更新！"}
+
+        return {
+            "message": "站点配置已成功更新！",
+            "path": str(SITE_CONFIG_PATH)  # 将Path对象转换为字符串
+        }
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="提供的内容不是有效的JSON格式。")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存文件时发生错误: {e}")
 
 
+@app.post("/users/me/upload-avatar", response_model=models.UserRead, tags=["Users"])
+async def upload_user_avatar(
+        file: UploadFile = File(...),
+        current_user: models.User = Depends(get_current_active_user),
+        session: AsyncSession = Depends(get_async_session),
+        settings: Settings = Depends(get_settings)
+):
+    """
+    为当前登录用户上传或更新头像。
+    """
+    # 1. 验证文件类型
+    if file.content_type not in ["image/jpeg", "image/png", "image/gif"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不支持的图片格式。请上传 JPG, PNG, 或 GIF 格式的图片。"
+        )
+
+    # 2. 生成一个唯一的文件名以避免冲突
+    file_extension = Path(file.filename).suffix.lower()
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    save_path = AVATARS_DIR / unique_filename
+
+    # 3. 保存文件到服务器
+    try:
+        with open(save_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        logger.error(f"保存头像文件失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="上传头像时发生服务器内部错误。"
+        )
+    finally:
+        file.file.close()
+
+    # 4. 更新数据库中用户的 avatar_url
+    # 我们将保存一个相对路径，方便前端拼接
+    avatar_url_to_store = f"/uploads/avatars/{unique_filename}"
+    current_user.avatar_url = avatar_url_to_store
+    current_user.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+
+    return current_user
 
 # --- 用于直接运行 Uvicorn (主要用于开发) ---
 if __name__ == "__main__":

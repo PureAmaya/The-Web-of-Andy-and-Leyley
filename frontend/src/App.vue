@@ -1,5 +1,4 @@
 <template>
-  <!-- 新增：追踪代码注入区域 -->
   <div v-if="settingsStore.trackingCode" v-html="settingsStore.trackingCode"></div>
 
   <div id="app-layout">
@@ -58,6 +57,8 @@
     </main>
 
     <TheFooter/>
+
+    <GlobalModal />
   </div>
 </template>
 
@@ -67,6 +68,7 @@ import {onMounted, ref, watch} from 'vue';
 import {useAuthStore} from '@/stores/auth';
 import {useSettingsStore} from '@/stores/settings';
 import TheFooter from '@/components/TheFooter.vue';
+import GlobalModal from '@/components/GlobalModal.vue'; // 导入全局弹窗组件
 
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
@@ -124,7 +126,7 @@ function onThemeChange() {
 }
 
 .logo {
-  flex-shrink: 0; /* 核心修正：防止logo容器在flex布局中被压缩 */
+  flex-shrink: 0;
 }
 
 .logo a {
@@ -238,20 +240,44 @@ function onThemeChange() {
   100% { transform: translate(0, 0); opacity: 1; }
 }
 
-@media (max-width: 768px) {
+
+@media (max-width: 860px) {
   .header-content {
     padding: 0 1rem;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
+
+  .logo {
+    flex-basis: 100%;
+    margin-bottom: 0.5rem;
+    justify-content: center;
+  }
+
   .site-logo-text {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
   }
+
   .main-nav {
-    gap: 2px;
-    margin-left: 20px;
+    margin: 0;
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
   }
+
   .nav-link {
     font-size: 0.9rem;
-    padding: 0.3rem 0.5rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .theme-switcher {
+    order: 2;
+  }
+
+  .app-content {
+    padding: 1rem;
   }
 }
 </style>
