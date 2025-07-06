@@ -3,13 +3,13 @@
     <div class="lightbox-content">
       <img
         v-if="selectedItem.item_type === 'image'"
-        :src="`${apiBaseUrl}${selectedItem.image_url}`"
+        :src="getFullImageUrl(selectedItem.image_url, selectedItem.title, apiBaseUrl)"
         :alt="selectedItem.title"
         class="lightbox-media"
       />
       <video
         v-else-if="selectedItem.item_type === 'video'"
-        :src="`${apiBaseUrl}${selectedItem.image_url}`"
+        :src="getFullImageUrl(selectedItem.image_url, selectedItem.title, apiBaseUrl)"
         class="lightbox-media"
         controls
         autoplay
@@ -32,7 +32,7 @@
           </p>
         </div>
         <a
-          :href="`${apiBaseUrl}${selectedItem.image_url}`"
+          :href="getFullImageUrl(selectedItem.image_url, selectedItem.title, apiBaseUrl)"
           :download="getDownloadFilename(selectedItem)"
           class="download-button"
           target="_blank"
@@ -48,6 +48,8 @@
 
 <script setup>
 import { defineProps, defineEmits } from 'vue';
+// 1. 导入 URL 生成工具函数
+import { getFullImageUrl } from '@/utils/imageUtils';
 
 // 定义组件接收的属性
 const props = defineProps({
