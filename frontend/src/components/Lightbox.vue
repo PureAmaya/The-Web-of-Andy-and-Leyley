@@ -48,7 +48,7 @@
 
 <script setup>
 import { defineProps, defineEmits } from 'vue';
-// 1. 导入 URL 生成工具函数
+// 核心修正：导入 URL 生成工具函数
 import { getFullImageUrl } from '@/utils/imageUtils';
 
 // 定义组件接收的属性
@@ -80,7 +80,7 @@ const getDownloadFilename = (item) => {
 </script>
 
 <style scoped>
-/* 这里是所有从 GalleryView 和 HomeView 移动过来的灯箱样式 */
+/* 样式部分保持不变 */
 .lightbox-overlay {
   position: fixed;
   top: 0;
