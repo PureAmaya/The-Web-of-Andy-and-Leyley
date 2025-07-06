@@ -77,6 +77,9 @@ import { ref, onMounted } from 'vue';
 import apiClient from '@/api';
 import { useSettingsStore } from '@/stores/settings';
 import { getFullImageUrl } from '@/utils/imageUtils';
+// 导入 Lightbox 组件
+import Lightbox from '@/components/Lightbox.vue';
+
 
 const settingsStore = useSettingsStore();
 
@@ -122,21 +125,9 @@ function closeLightbox() {
   selectedItemForLightbox.value = null;
 }
 
-
-
-const getDownloadFilename = (item) => {
-  if (!item || !item.image_url) return 'download';
-  // 从URL中提取文件名，并替换为标题
-  const originalFilename = item.image_url.split('/').pop();
-  const extension = originalFilename.split('.').pop();
-  // 生成一个更友好的文件名，例如 "作品标题.mp4"
-  return `${item.title.replace(/[/\\?%*:|"<>]/g, '-')}.${extension}`;
-};
-
 onMounted(() => {
   fetchGalleryItems();
 });
-
 
 </script>
 
@@ -248,6 +239,8 @@ onMounted(() => {
   background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1));
   opacity: 0; /* 默认完全透明 */
   transition: opacity 0.4s ease;
+  /* 核心修复：让这个遮罩层不接受鼠标事件，让点击穿透到下面的 .gallery-item */
+  pointer-events: none;
 }
 
 /* 鼠标悬浮时的变化 */
@@ -270,8 +263,6 @@ onMounted(() => {
   margin: 0.5rem 0 0;
   font-style: italic;
 }
-
-
 
 /* 分页组件样式 */
 .pagination {
